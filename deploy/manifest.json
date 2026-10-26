@@ -1,0 +1,34 @@
+{
+  "app-1.js": {
+    "bytes": 21155,
+    "sha1": "cce3beca79a9e6d3afba7f08cd58f4a8c948c9d9"
+  },
+  "app-2.js": {
+    "bytes": 21016,
+    "sha1": "f6877fde4a2facd4d63f3a6629b22cf53a3c8425"
+  },
+  "app-3.js": {
+    "bytes": 21054,
+    "sha1": "ddd8ef80f41aa4c9db2f89b6517a98ab6381be5e"
+  },
+  "app-4.js": {
+    "bytes": 21036,
+    "sha1": "3d03b7eea0bfef7a8ce6e0da70dfbe8457915523"
+  },
+  "app.css": {
+    "bytes": 17841,
+    "sha1": "98cc0e43fbad81014b5c1620b509f3152769b572"
+  },
+  "index.html": {
+    "bytes": 27538,
+    "sha1": "cc7c03f76d8e07b7d05bc2e72737b202b2ee2f2d"
+  },
+  "sheet.css": {
+    "bytes": 17656,
+    "sha1": "3a565bb18f1491857fb1082945e7c0fd42875f78"
+  },
+  "vercel.json": {
+    "bytes": 407,
+    "sha1": "0a0821423a5a14fd73e6ada075f6419f84c87b08"
+  }
+}

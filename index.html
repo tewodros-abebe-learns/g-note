@@ -1,0 +1,2721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>G/note. — Markdown + LaTeX → GPAI-style cheat-sheet PDF</title>
+<meta name="description" content="G/note. — paste Markdown and LaTeX and export a dense, GPAI-style multi-column cheat-sheet PDF.">
+<meta name="theme-color" content="#f7b955">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%23171310'/%3E%3Ctext x='32' y='43' font-family='Arial,sans-serif' font-size='27' font-weight='700' fill='%23f7b955' text-anchor='middle'%3EG/%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/katex.min.css">
+<style>
+/* Same body font GPAI embedded in the reference PDF (Liberation Serif),
+   vendored locally so the sheet looks identical on every machine. */
+@font-face{font-family:"Liberation Serif";src:url("vendor/fonts/LiberationSerif-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"Liberation Serif";src:url("vendor/fonts/LiberationSerif-Bold.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"Liberation Serif";src:url("vendor/fonts/LiberationSerif-Italic.woff2") format("woff2");font-weight:400;font-style:italic;font-display:swap}
+@font-face{font-family:"Liberation Serif";src:url("vendor/fonts/LiberationSerif-BoldItalic.woff2") format("woff2");font-weight:700;font-style:italic;font-display:swap}
+/* Optional sheet fonts + the G/note. interface typefaces (all vendored). */
+@font-face{font-family:"Liberation Sans";src:url("vendor/fonts/LiberationSans-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"Liberation Sans";src:url("vendor/fonts/LiberationSans-Bold.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"Liberation Sans";src:url("vendor/fonts/LiberationSans-Italic.woff2") format("woff2");font-weight:400;font-style:italic;font-display:swap}
+@font-face{font-family:"Liberation Sans";src:url("vendor/fonts/LiberationSans-BoldItalic.woff2") format("woff2");font-weight:700;font-style:italic;font-display:swap}
+@font-face{font-family:"Plus Jakarta Sans";src:url("vendor/fonts/PlusJakartaSans-Variable.woff2") format("woff2");font-weight:200 800;font-style:normal;font-display:swap}
+@font-face{font-family:"Playfair Display";src:url("vendor/fonts/PlayfairDisplay-Italic-Variable.woff2") format("woff2");font-weight:400 900;font-style:italic;font-display:swap}
+
+:root{
+  /* G/note. palette — mustard, cream and ink, from the design reference */
+  --ink:#171310;
+  --ink-2:#46403a;
+  --muted:#8a7f73;
+  --faint:#b3a894;
+  --line:#f0e3cd;
+  --line-strong:#e2cfb0;
+  --panel:#ffffff;
+  --panel-2:#fffaf2;
+  --canvas:#fff3df;
+  --field:#fdf3e0;
+  --brand:#f7b955;
+  --brand-strong:#f5a623;
+  --brand-soft:#fdeecb;
+  --accent:#e08a00;
+  --accent-hover:#bd7200;
+  --accent-soft:#fdf0d5;
+  --blue:#245b9e;
+  --danger:#a52a2a;
+  --shadow:0 12px 34px rgba(94,64,18,.14);
+  --radius:16px;
+  --header-h:58px;
+  --preview-zoom:1;
+
+  /* sheet variables are driven by the Design panel */
+  --page-w:210mm;
+  --page-h:297mm;
+  --margin-mm:10;
+  --gap-mm:4.8;
+  --body-pt:6.5;
+  --leading:1.24;
+  --word-spacing:0em;
+  --letter-spacing:0em;
+  --paragraph-gap:.42em;
+  --list-gap:.14em;
+  --heading-before:.95em;
+  --heading-after:.4em;
+  --list-indent:1.35em;
+  --math-gap:.35em;
+  --table-pad-y:.22em;
+  --table-pad-x:.34em;
+  --first-line-indent:0em;
+  --body-weight:400;
+  --emphasis-weight:700;
+  --heading-weight:700;
+  --sheet-bg:#ffffff;
+  --sheet-font:"Liberation Serif","Times New Roman",Times,serif;
+  --sentence-gap:0em;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  color:var(--ink);
+  background:var(--canvas);
+  font-family:"Plus Jakarta Sans",Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:14px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid rgba(224,138,0,.55);outline-offset:2px}
+svg.icon{width:16px;height:16px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+/* ============================= App bar ============================= */
+.app-header{
+  min-height:58px;
+  padding:8px 14px;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  background:linear-gradient(180deg,#ffc761,#f7b955);
+  border-bottom:1px solid #eda93b;
+  position:relative;
+  z-index:80;
+}
+.brand-wrap{display:flex;align-items:center;gap:10px;min-width:0}
+.logo-mark{
+  width:36px;height:36px;border-radius:11px;background:var(--ink);color:var(--brand);
+  display:grid;place-items:center;box-shadow:0 4px 12px rgba(94,58,0,.28);flex:0 0 auto;
+  font-size:15px;font-weight:800;letter-spacing:-.02em;
+}
+.brand-copy{min-width:0}
+.brand-copy h1{font-size:17px;line-height:1.05;letter-spacing:-.015em;margin:0;font-weight:800;white-space:nowrap;color:var(--ink)}
+.brand-note{
+  background:var(--ink);color:#f9c65c;font-family:"Playfair Display",Georgia,serif;font-style:italic;
+  font-weight:600;padding:0 9px 2px;border-radius:999px;margin-left:3px;display:inline-block;line-height:1.25;
+}
+.brand-copy p{margin:2px 0 0;color:#7a5a10;font-size:11px;line-height:1.1;white-space:nowrap;font-weight:600}
+.header-center{display:flex;align-items:center;gap:8px;margin-left:10px;min-width:0}
+.stats{
+  display:inline-flex;align-items:center;gap:4px;white-space:nowrap;
+  color:var(--ink-2);background:rgba(255,255,255,.55);border:1px solid rgba(23,19,16,.14);
+  padding:5px 10px;border-radius:999px;font-size:11.5px;
+}
+.stats b{color:var(--ink);font-weight:750;font-variant-numeric:tabular-nums}
+.errbadge{
+  display:none;align-items:center;gap:5px;border:1px solid #e5a3a3;background:#fff3f2;color:#8d2626;
+  border-radius:999px;padding:5px 10px;font-size:11.5px;font-weight:650;white-space:nowrap;
+}
+.header-actions{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+.btn{
+  appearance:none;min-height:34px;border:1px solid var(--line-strong);background:#fff;color:var(--ink-2);
+  border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;
+  transition:background .15s,border-color .15s,color .15s,transform .05s;
+}
+.btn:hover{background:var(--panel-2);border-color:#d3ba8d;color:var(--ink)}
+.btn:active{transform:translateY(1px)}
+.app-header .btn{border-color:rgba(23,19,16,.22);background:rgba(255,255,255,.82);color:var(--ink)}
+.app-header .btn:hover{background:#fff;border-color:rgba(23,19,16,.4)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#f9c65c;box-shadow:0 6px 16px rgba(94,58,0,.3);font-weight:700}
+.btn.primary:hover{background:#2a241e;border-color:#2a241e;color:#ffd98a}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover{background:var(--panel-2);border-color:var(--line)}
+.btn.small{min-height:29px;padding:5px 10px;border-radius:999px;font-size:11.5px}
+.btn.icon-only{width:34px;padding:0}
+.btn[aria-expanded="true"]{background:var(--ink);border-color:var(--ink);color:#f9c65c}
+.btn[aria-expanded="true"]:hover{background:#2a241e;color:#ffd98a}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* help dropdown */
+.help-menu{position:relative}
+.help-menu summary{list-style:none}
+.help-menu summary::-webkit-details-marker{display:none}
+.helpbody{
+  position:absolute;right:0;top:44px;z-index:120;width:min(580px,calc(100vw - 24px));
+  background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:0 22px 55px rgba(94,64,18,.22);
+  padding:20px 22px;font-size:13px;line-height:1.55;max-height:74vh;overflow:auto;color:var(--ink-2);
+}
+.helpbody h3{font-size:13px;margin:18px 0 7px;color:var(--ink)}
+.helpbody h3:first-child{margin-top:0}
+.helpbody ul{padding-left:19px;margin:7px 0}
+.helpbody li{margin:4px 0}
+.helpbody code{background:var(--brand-soft);border:1px solid #f3dfae;border-radius:5px;padding:1px 4px;font-size:11.5px}
+.helpbody pre{background:#211a12;color:#ffe9bd;border-radius:13px;padding:12px 13px;overflow:auto;font-size:11.5px;line-height:1.55}
+
+/* ============================= Workspace ============================= */
+main{
+  flex:1;min-height:0;display:grid;
+  grid-template-columns:minmax(340px,39%) 292px minmax(0,1fr);
+  background:var(--canvas);
+}
+body.design-closed main{grid-template-columns:minmax(340px,40%) minmax(0,1fr)}
+body.design-closed .inspector{display:none}
+
+.pane-head{
+  min-height:44px;padding:7px 10px 7px 14px;display:flex;align-items:center;gap:8px;
+  border-bottom:1px solid var(--line);background:#fff;
+}
+.pane-title{display:flex;align-items:center;gap:8px;min-width:0;margin-right:auto}
+.pane-kicker{font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);font-weight:800}
+.pane-title strong{font-size:12.5px;font-weight:700;color:var(--ink);white-space:nowrap}
+.pane-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+
+/* editor */
+.editor-pane{min-width:0;min-height:0;display:flex;flex-direction:column;background:#fff;border-right:1px solid var(--line);position:relative}
+#editor{
+  flex:1;min-height:0;width:100%;border:0;outline:none;resize:none;
+  padding:18px 18px 22px;background:#fff;color:#25231f;caret-color:var(--accent);
+  font:12.5px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  tab-size:2;white-space:pre-wrap;word-break:break-word;
+}
+#editor::selection{background:#ffe1a8}
+#editor::placeholder{color:#c4b294}
+.editor-footer{
+  min-height:34px;padding:6px 12px;border-top:1px solid var(--line);background:var(--panel-2);
+  display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px;
+}
+.editor-footer .dot{width:6px;height:6px;border-radius:50%;background:#3c8c5a;flex:0 0 auto}
+.editor-footer .editor-meta{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+body.dragging .editor-pane::after{
+  content:"Drop to add";position:absolute;inset:52px 12px 44px;border:1.5px dashed var(--accent);
+  border-radius:16px;background:rgba(253,240,213,.8);display:grid;place-items:center;
+  color:var(--accent-hover);font-weight:700;pointer-events:none;z-index:2;
+}
+
+/* ============================= Design inspector ============================= */
+.inspector{
+  min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  background:var(--panel-2);border-right:1px solid var(--line);scrollbar-width:thin;scrollbar-color:#e0cba3 transparent;
+}
+.inspector-head{
+  position:sticky;top:0;z-index:4;background:rgba(255,250,242,.94);backdrop-filter:blur(10px);
+  padding:14px 16px 10px;border-bottom:1px solid var(--line);
+}
+.inspector-head-row{display:flex;align-items:flex-start;gap:8px}
+.inspector-head h2{font-size:14px;margin:0;letter-spacing:-.01em;font-weight:800}
+.inspector-head h2 .accent-serif{font-family:"Playfair Display",Georgia,serif;font-style:italic;font-weight:600;color:var(--accent-hover)}
+.inspector-head p{margin:3px 0 0;color:var(--muted);font-size:11px;line-height:1.35}
+.inspector-close{display:none;margin-left:auto}
+.preset-label{margin:13px 0 7px;color:var(--accent);font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:800}
+.preset-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.preset-chip{
+  border:1px solid var(--line-strong);background:#fff;color:var(--ink-2);border-radius:999px;
+  padding:6px 3px;font-size:10.5px;font-weight:650;transition:.15s;
+}
+.preset-chip:hover{border-color:#d3ba8d;background:#fffdf8}
+.preset-chip.active{background:var(--ink);border-color:var(--ink);color:#f9c65c}
+.design-section{border-bottom:1px solid var(--line)}
+.design-section>summary{
+  list-style:none;cursor:pointer;padding:13px 16px;display:flex;align-items:center;gap:7px;
+  font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--ink);user-select:none;
+}
+.design-section>summary::-webkit-details-marker{display:none}
+.design-section>summary::after{content:"";margin-left:auto;width:7px;height:7px;border-right:1.6px solid var(--faint);border-bottom:1.6px solid var(--faint);transform:rotate(45deg);transition:.16s}
+.design-section[open]>summary::after{transform:rotate(225deg)}
+.design-section>summary svg{color:var(--ink);background:#fce3ae;border-radius:8px;padding:3px;width:22px;height:22px;box-sizing:border-box}
+.section-body{padding:1px 16px 16px}
+.section-note{font-size:11px;line-height:1.45;color:var(--muted);margin:-2px 0 11px}
+.field{margin:0 0 13px}
+.field:last-child{margin-bottom:0}
+.field-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
+.field-head label{font-size:11.5px;font-weight:580;color:var(--ink-2)}
+.field-head output{
+  font:10.5px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink-2);
+  background:#fff6e6;border:1px solid var(--line);padding:3px 7px;border-radius:999px;white-space:nowrap;font-variant-numeric:tabular-nums;
+}
+.field-hint{font-size:10.5px;line-height:1.4;color:var(--faint);margin-top:5px}
+input[type="range"]{appearance:none;-webkit-appearance:none;width:100%;height:22px;background:transparent;cursor:pointer;display:block}
+input[type="range"]::-webkit-slider-runnable-track{height:5px;border-radius:99px;background:linear-gradient(to right,var(--brand-strong) var(--fill,50%),#f0e0c4 var(--fill,50%))}
+input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;margin-top:-5.5px;border-radius:50%;background:#fff;
+  border:1.5px solid #d8bd8a;box-shadow:0 1px 4px rgba(94,64,18,.25);
+}
+input[type="range"]::-moz-range-track{height:5px;border-radius:99px;background:#f0e0c4}
+input[type="range"]::-moz-range-progress{height:5px;border-radius:99px;background:var(--brand-strong)}
+input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:1.5px solid #d8bd8a;box-shadow:0 1px 4px rgba(94,64,18,.25)}
+.segmented{display:flex;gap:3px;padding:3px;background:#f7ead2;border-radius:999px}
+.segmented button{
+  flex:1;border:0;background:transparent;color:var(--muted);padding:6px 5px;border-radius:999px;
+  font-size:11.5px;font-weight:650;transition:.14s;white-space:nowrap;
+}
+.segmented button:hover{color:var(--ink)}
+.segmented button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 5px rgba(94,64,18,.18)}
+.seg-fonts{flex-wrap:wrap;border-radius:16px}
+.seg-fonts button{flex:1 1 42%;font-size:11px}
+.swatches{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.swatch{
+  width:27px;height:27px;border-radius:50%;background:var(--sw,#fff);padding:0;
+  border:1.5px solid rgba(23,19,16,.22);cursor:pointer;position:relative;flex:0 0 auto;
+  transition:transform .12s,border-color .12s,box-shadow .12s;
+}
+.swatch:hover{transform:scale(1.08)}
+.swatch[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px var(--panel-2),0 0 0 4px var(--ink)}
+.swatch-custom{
+  display:grid;place-items:center;overflow:hidden;
+  background:conic-gradient(#f66,#fc3,#6f6,#6cf,#96f,#f66);
+}
+.swatch-custom input[type="color"]{position:absolute;inset:-8px;width:200%;height:200%;opacity:0;cursor:pointer;border:0;padding:0}
+.switch-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:7px 0;cursor:pointer}
+.switch-row+.switch-row{border-top:1px solid #f3e7cf}
+.switch-copy strong{display:block;font-size:11.5px;font-weight:580;color:var(--ink-2)}
+.switch-copy span{display:block;font-size:10.5px;color:var(--faint);line-height:1.35;margin-top:1px}
+.switch{position:relative;width:34px;height:20px;flex:0 0 auto}
+.switch input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
+.switch i{position:absolute;inset:0;border-radius:99px;background:#e7d7b8;transition:.18s;pointer-events:none}
+.switch i::after{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(94,64,18,.3);transition:.18s}
+.switch input:checked+i{background:var(--brand-strong)}
+.switch input:checked+i::after{transform:translateX(14px)}
+.switch input:focus-visible+i{outline:2px solid rgba(224,138,0,.55);outline-offset:2px}
+.text-input{
+  width:100%;border:1px solid var(--line-strong);background:#fff;border-radius:12px;
+  min-height:34px;padding:7px 10px;color:var(--ink);font-size:12px;outline:none;
+}
+.text-input:focus{border-color:var(--brand-strong);box-shadow:0 0 0 3px rgba(245,166,35,.2)}
+.subdetails{border-top:1px dashed var(--line-strong);margin-top:13px;padding-top:2px}
+.subdetails>summary{list-style:none;cursor:pointer;color:var(--muted);font-size:11px;font-weight:650;padding:8px 0;display:flex;align-items:center}
+.subdetails>summary::-webkit-details-marker{display:none}
+.subdetails>summary::after{content:"+";margin-left:auto;font-size:15px;color:var(--faint)}
+.subdetails[open]>summary::after{content:"−"}
+.inspector-foot{padding:15px 16px 20px}
+.reset-btn{width:100%}
+.view-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px}
+
+/* ============================= Preview canvas ============================= */
+.preview-pane{
+  min-width:0;min-height:0;overflow:auto;padding:18px 22px 64px;
+  background-color:var(--canvas);
+  background-image:radial-gradient(rgba(160,116,38,.16) .7px,transparent .7px);
+  background-size:18px 18px;
+  scrollbar-width:thin;scrollbar-color:#dfc79c transparent;
+}
+.preview-toolbar{
+  width:calc(var(--page-w) * var(--preview-zoom) + 2px);max-width:none;margin:0 auto 10px;min-height:34px;
+  display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11.5px;
+  background:transparent;border:0;border-radius:0;padding:0;position:relative;z-index:5;
+}
+.preview-toolbar .spacer{flex:1}
+
+/* ============================= The sheet (screen = print) ============================= */
+.pages{margin:0 auto;width:var(--page-w);transform-origin:top center}
+.page{
+  position:relative;background:var(--sheet-bg);color:#000;
+  width:var(--page-w);height:var(--page-h);
+  padding:calc(var(--margin-mm)*1mm);
+  display:flex;gap:calc(var(--gap-mm)*1mm);
+  box-shadow:0 3px 8px rgba(32,29,24,.09),0 18px 45px rgba(32,29,24,.13);
+  margin:0 auto 24px;overflow:hidden;border-radius:2px;
+}
+.col{flex:1 1 0;min-width:0;height:100%;overflow:hidden;contain:layout paint;isolation:isolate}
+.pagefoot{position:absolute;left:calc(var(--margin-mm)*1mm);right:calc(var(--margin-mm)*1mm);bottom:4.5mm;display:flex;justify-content:space-between;gap:6mm;font-size:7pt;color:#333;pointer-events:none}
+.pagefoot span:first-child{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pagefoot span:last-child{flex:0 0 auto}
+.fatal-error{width:min(var(--page-w),100%);margin:0 auto;background:#fff;border:1px solid #efc5c5;border-radius:14px;padding:22px 24px;color:#7a2020;box-shadow:var(--shadow);line-height:1.55}
+.fatal-error strong{display:block;font-size:15px;margin-bottom:6px;color:#8d2626}
+.sheet{
+  font-family:var(--sheet-font);
+  font-weight:var(--body-weight);
+  font-size:calc(var(--body-pt)*1pt);
+  line-height:var(--leading);
+  word-spacing:var(--word-spacing);
+  letter-spacing:var(--letter-spacing);
+  text-align:justify;hyphens:auto;-webkit-hyphens:auto;
+  overflow-wrap:break-word;
+}
+.sheet.no-justify{text-align:left}
+.sheet.no-hyphens{hyphens:none;-webkit-hyphens:none}
+.sheet p{margin:0 0 var(--paragraph-gap);text-indent:var(--first-line-indent)}
+.sheet .split-head{margin-bottom:0 !important}
+.sheet .split-continuation{margin-top:0 !important;text-indent:0 !important}
+.sheet li>p,.sheet blockquote p,.sheet td p,.sheet th p{text-indent:0}
+.sheet strong,.sheet b{font-weight:var(--emphasis-weight)}
+.sheet h1{font-size:1.7em;line-height:1.15;margin:.1em 0 .35em;font-weight:var(--heading-weight);text-align:left;text-indent:0}
+.sheet h1.doc-kicker{font-size:1.05em;font-weight:400;margin:0 0 .1em}
+.sheet h2{font-size:1.24em;line-height:1.2;font-weight:var(--heading-weight);margin:var(--heading-before) 0 var(--heading-after);text-align:left;break-after:avoid;text-indent:0}
+.sheet.rules h2{border-top:.55pt solid #000;padding-top:.34em}
+.sheet h1.sectionlike{font-size:1.24em;line-height:1.2;font-weight:var(--heading-weight);margin:var(--heading-before) 0 var(--heading-after);text-align:left}
+.sheet.rules h1.sectionlike{border-top:.55pt solid #000;padding-top:.34em}
+.sheet h3{font-size:1.09em;line-height:1.22;font-weight:var(--heading-weight);margin:calc(var(--heading-before)*.84) 0 calc(var(--heading-after)*.8);text-align:left;break-after:avoid;text-indent:0}
+.sheet h4{font-size:1em;font-weight:var(--heading-weight);margin:calc(var(--heading-before)*.68) 0 calc(var(--heading-after)*.62);text-align:left;text-indent:0}
+.sheet h5,.sheet h6{font-size:1em;font-weight:var(--heading-weight);font-style:italic;margin:calc(var(--heading-before)*.62) 0 calc(var(--heading-after)*.5);text-align:left;text-indent:0}
+.sheet hr{border:0;border-top:.55pt solid #000;margin:calc(var(--paragraph-gap) + .35em) 0}
+.sheet ul,.sheet ol{margin:.08em 0 calc(var(--paragraph-gap) + .06em);padding-left:var(--list-indent)}
+.sheet ul,.sheet ul ul,.sheet ul ul ul{list-style-type:disc}
+.sheet li{margin:var(--list-gap) 0}
+.sheet li>p{margin:0 0 calc(var(--paragraph-gap)*.55)}
+.sheet ul ul,.sheet ul ol,.sheet ol ul,.sheet ol ol{margin:.08em 0 calc(var(--paragraph-gap)*.55)}
+.sheet blockquote{margin:calc(var(--paragraph-gap)*.9) 0 calc(var(--paragraph-gap) + .15em);padding:.25em 0 .25em .7em;border-left:1.4pt solid #999;color:#111}
+.sheet blockquote p:last-child{margin-bottom:0}
+.sheet code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.86em;background:#f2f2f2;padding:0 .25em;border-radius:3px;word-spacing:normal;letter-spacing:normal}
+.sheet pre{background:#f6f6f6;border:.4pt solid #ccc;border-radius:3px;padding:.5em .6em;white-space:pre-wrap;word-break:break-word;margin:calc(var(--paragraph-gap)*.9) 0 calc(var(--paragraph-gap) + .15em)}
+.sheet pre code{background:none;padding:0}
+.sheet a{color:#000;text-decoration:underline;text-decoration-thickness:.4pt;text-underline-offset:1.5px}
+.sheet img{max-width:100%;height:auto;display:block;margin:.35em auto}
+.sheet figure{margin:calc(var(--paragraph-gap)*.9) 0 calc(var(--paragraph-gap) + .15em)}
+.sheet figcaption{font-size:.88em;text-align:center;color:#222;margin-top:.2em}
+.sheet .table-wrap{margin:calc(var(--paragraph-gap)*.9) 0 calc(var(--paragraph-gap) + .2em)}
+.sheet table{border-collapse:collapse;width:100%;font-size:.94em;line-height:calc(var(--leading)*.96)}
+.sheet th,.sheet td{border:.4pt solid #555;padding:var(--table-pad-y) var(--table-pad-x);vertical-align:top;text-align:left;word-break:break-word}
+.sheet th{font-weight:var(--emphasis-weight);background:#efefef}
+.sheet td .katex,.sheet th .katex{white-space:nowrap}
+.sheet svg{max-width:100%;height:auto;display:block;margin:.3em auto}
+.sheet .katex{font-size:1.04em;word-spacing:normal;letter-spacing:normal}
+.sheet .math-display{margin:var(--math-gap) 0 calc(var(--math-gap) + .1em);text-align:left;overflow:hidden}
+.sheet .math-display .katex-display{margin:0;text-align:left}
+.sheet .katex-display>.katex{text-align:left}
+.sheet .math-error{color:#b00020;background:#fff1f1;border:.4pt dashed #b00020;padding:0 .3em;border-radius:3px;font-family:ui-monospace,monospace;font-size:.85em}
+.sheet input[type="checkbox"]{margin:0 .35em 0 calc(-1*min(1.1em,var(--list-indent)));transform:scale(.8)}
+.sheet sup,.sheet sub{line-height:0}
+/* sentence-final word+punctuation gets the extra sentence gap after it */
+.sheet .sent-end{margin-right:var(--sentence-gap)}
+.overflow-note{outline:1px dashed #b00020;outline-offset:1px}
+
+/* ============================= Dialog / toast ============================= */
+dialog#errors{border:1px solid var(--line);border-radius:20px;max-width:min(680px,94vw);padding:22px 24px;box-shadow:var(--shadow);color:var(--ink)}
+dialog#errors::backdrop{background:rgba(43,32,14,.42);backdrop-filter:blur(2px)}
+dialog#errors li{margin:.35em 0;font-family:ui-monospace,monospace;font-size:12px;word-break:break-word}
+.toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,8px);background:var(--ink);color:#fff3d6;padding:9px 16px;border-radius:999px;font-size:12.5px;font-weight:600;opacity:0;pointer-events:none;transition:.22s;z-index:200;box-shadow:0 10px 28px rgba(94,64,18,.3);border:1px solid rgba(249,198,92,.25)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ============================= Note name + notes library ============================= */
+.note-title{
+  border:1px solid transparent;background:transparent;border-radius:9px;
+  padding:3px 8px;min-width:70px;max-width:250px;width:18ch;
+  font-size:12.5px;font-weight:700;color:var(--ink);outline:none;text-overflow:ellipsis;
+}
+.note-title:hover{border-color:var(--line-strong);background:var(--panel-2)}
+.note-title:focus{border-color:var(--brand-strong);background:var(--field);box-shadow:0 0 0 3px rgba(245,166,35,.18)}
+.pane-actions .act-sep{width:1px;height:18px;background:var(--line-strong);margin:0 2px;flex:0 0 auto}
+dialog{background:var(--panel);color:var(--ink)}
+dialog#notesdlg{border:1px solid var(--line);border-radius:20px;max-width:min(560px,94vw);width:100%;padding:0;box-shadow:var(--shadow)}
+dialog#notesdlg::backdrop{background:rgba(43,32,14,.45);backdrop-filter:blur(2px)}
+.notes-dlg-head{display:flex;align-items:center;gap:10px;padding:16px 18px 10px}
+.notes-dlg-head h3{margin:0;font-size:14.5px;font-weight:800;letter-spacing:-.01em}
+.notes-dlg-head .accent-serif{font-family:"Playfair Display",Georgia,serif;font-style:italic;font-weight:600;color:var(--accent-hover)}
+.notes-dlg-head .btn{margin-left:auto}
+.notes-list{max-height:min(52vh,420px);overflow:auto;padding:4px 12px 8px;display:flex;flex-direction:column;gap:6px}
+.note-row{
+  display:flex;align-items:center;gap:8px;padding:7px 8px 7px 12px;border:1px solid var(--line);
+  border-radius:13px;background:var(--panel-2);
+}
+.note-row.current{border-color:var(--brand-strong);box-shadow:0 0 0 2px rgba(245,166,35,.16)}
+.note-row .note-row-title{
+  flex:1;min-width:0;border:1px solid transparent;background:transparent;border-radius:8px;
+  padding:4px 7px;font-size:12.5px;font-weight:650;color:var(--ink);outline:none;text-overflow:ellipsis;
+}
+.note-row .note-row-title:hover{border-color:var(--line-strong)}
+.note-row .note-row-title:focus{border-color:var(--brand-strong);background:var(--field)}
+.note-row .note-row-meta{font-size:10px;color:var(--muted);white-space:nowrap;flex:0 0 auto}
+.note-row .note-row-badge{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#7a5a10;background:var(--brand-soft);border:1px solid var(--line-strong);border-radius:999px;padding:3px 7px;white-space:nowrap}
+.note-row .note-row-open{flex:0 0 auto}
+.note-row .note-row-del{flex:0 0 auto;color:var(--danger)}
+.notes-dlg-foot{display:flex;align-items:center;gap:10px;padding:10px 16px 16px;border-top:1px solid var(--line)}
+.notes-dlg-foot .hint{font-size:10.5px;color:var(--muted);margin-left:auto;text-align:right;max-width:56%}
+.notes-empty{padding:22px 16px;text-align:center;color:var(--muted);font-size:12.5px}
+
+/* ============================= Dark mode (interface only — the sheet stays print-true) ============================= */
+:root[data-theme="dark"]{
+  --ink:#f1e7d6;--ink-2:#c9bda9;--muted:#9a8e7a;--faint:#7d7364;
+  --line:#372f24;--line-strong:#4c4132;
+  --panel:#1e1a14;--panel-2:#241f18;--canvas:#15110b;--field:#2c261c;
+  --brand-soft:#3a2e14;--accent:#f7b955;--accent-hover:#ffcd70;--accent-soft:#342911;
+  --blue:#7fb2ee;--danger:#ef9090;
+  --shadow:0 12px 34px rgba(0,0,0,.55);
+}
+/* The header stays the light brand zone (mustard) in every theme */
+[data-theme="dark"] .app-header .brand-copy h1{color:#171310}
+[data-theme="dark"] .logo-mark{background:#171310;color:var(--brand)}
+[data-theme="dark"] .brand-note{background:#171310;color:#f9c65c}
+[data-theme="dark"] .stats{color:#46403a;background:rgba(255,255,255,.55);border-color:rgba(23,19,16,.14)}
+[data-theme="dark"] .stats b{color:#171310}
+[data-theme="dark"] .app-header .btn{color:#171310}
+[data-theme="dark"] .app-header .btn[aria-expanded="true"]{background:#171310;border-color:#171310;color:#f9c65c}
+[data-theme="dark"] .app-header .btn[aria-expanded="true"]:hover{background:#2a241e;color:#ffd98a}
+[data-theme="dark"] .btn.primary{background:#171310;border-color:#171310;color:#f9c65c}
+[data-theme="dark"] .btn.primary:hover{background:#2a241e;border-color:#2a241e;color:#ffd98a}
+[data-theme="dark"] .pane-head,[data-theme="dark"] .editor-pane,[data-theme="dark"] #editor{background:var(--panel)}
+[data-theme="dark"] #editor{color:#e9dfcd;caret-color:var(--brand)}
+[data-theme="dark"] #editor::selection{background:#5a4718}
+[data-theme="dark"] #editor::placeholder{color:#6d6555}
+[data-theme="dark"] .btn{background:#2a241b;color:#ddd2bd;border-color:var(--line-strong)}
+[data-theme="dark"] .btn:hover{background:#332c21;border-color:#5d5140;color:#f4ead6}
+[data-theme="dark"] .btn.ghost:hover{background:#2e271d;border-color:#4a4031}
+[data-theme="dark"] .btn.icon-only{color:#ddd2bd}
+[data-theme="dark"] .helpbody{background:#1e1a14;border-color:var(--line);color:var(--ink-2);box-shadow:0 22px 55px rgba(0,0,0,.6)}
+[data-theme="dark"] .helpbody code{background:#342911;border-color:#4d3f1d}
+[data-theme="dark"] .inspector-head{background:rgba(30,26,20,.94)}
+[data-theme="dark"] .design-section>summary{color:var(--ink)}
+[data-theme="dark"] .design-section>summary svg{background:#4a3c1c}
+[data-theme="dark"] .preset-chip{background:#2a241b;color:#ddd2bd;border-color:var(--line-strong)}
+[data-theme="dark"] .preset-chip:hover{background:#332c21;border-color:#5d5140;color:#f4ead6}
+[data-theme="dark"] .preset-chip.active{background:var(--brand);border-color:var(--brand);color:#171310}
+[data-theme="dark"] .field-head output{background:#332a19;color:var(--ink-2);border-color:var(--line)}
+[data-theme="dark"] input[type="range"]::-webkit-slider-runnable-track{background:linear-gradient(to right,var(--brand-strong) var(--fill,50%),#453b2b var(--fill,50%))}
+[data-theme="dark"] input[type="range"]::-moz-range-track{background:#453b2b}
+[data-theme="dark"] input[type="range"]::-webkit-slider-thumb{background:#f2e8d8;border-color:#6d5f45}
+[data-theme="dark"] input[type="range"]::-moz-range-thumb{background:#f2e8d8;border-color:#6d5f45}
+[data-theme="dark"] .segmented{background:#2e2719}
+[data-theme="dark"] .segmented button{color:var(--muted)}
+[data-theme="dark"] .segmented button:hover{color:var(--ink)}
+[data-theme="dark"] .segmented button[aria-pressed="true"]{background:#4a402c;color:var(--ink);box-shadow:none}
+[data-theme="dark"] .switch i{background:#4a4032}
+[data-theme="dark"] .switch-row+.switch-row{border-top-color:#332c22}
+[data-theme="dark"] .text-input{background:#2a241b;color:var(--ink);border-color:var(--line-strong)}
+[data-theme="dark"] .text-input::placeholder{color:#7d7364}
+[data-theme="dark"] .subdetails{border-top-color:#3d3527}
+[data-theme="dark"] .preview-pane{background-image:radial-gradient(rgba(247,185,85,.10) .7px,transparent .7px)}
+[data-theme="dark"] .preview-toolbar{color:var(--muted)}
+
+[data-theme="dark"] .fatal-error{background:#1e1a14;border-color:#7a3535;color:#f0b7b7}
+[data-theme="dark"] .fatal-error strong{color:#ffb3b3}
+[data-theme="dark"] .errbadge{background:#2a1616;border-color:#7a3535;color:#f1b0b0}
+[data-theme="dark"] dialog#errors{border-color:var(--line)}
+[data-theme="dark"] dialog#errors::backdrop,[data-theme="dark"] dialog#notesdlg::backdrop{background:rgba(0,0,0,.62)}
+[data-theme="dark"] .toast{background:#2a2318;color:#ffe9c9;border-color:#55462c}
+[data-theme="dark"] body.dragging .editor-pane::after{background:rgba(34,28,14,.9);color:var(--brand);border-color:var(--brand)}
+[data-theme="dark"] .note-row{background:#241f18;border-color:var(--line)}
+[data-theme="dark"] .note-row .note-row-badge{color:#f7c97a;background:#342911;border-color:#4c4132}
+[data-theme="dark"] .inspector{scrollbar-color:#4c4132 transparent}
+[data-theme="dark"] .preview-pane{scrollbar-color:#4c4132 transparent}
+[data-theme="dark"] .notes-dlg-foot{border-top-color:var(--line)}
+
+/* ============================= Responsive ============================= */
+@media (max-width:1180px){
+  main{grid-template-columns:minmax(320px,42%) minmax(0,1fr)}
+  body.design-closed main{grid-template-columns:minmax(320px,42%) minmax(0,1fr)}
+  .inspector{
+    position:fixed;top:var(--header-h);right:0;bottom:0;width:min(310px,88vw);z-index:70;
+    box-shadow:-18px 0 45px rgba(94,64,18,.2);border-left:1px solid var(--line);border-right:0;
+  }
+  body.design-closed .inspector{display:block;transform:translateX(105%);pointer-events:none}
+  .inspector{transition:transform .22s ease}
+  .inspector-close{display:inline-flex}
+  .brand-copy p{display:none}
+  .header-center{margin-left:2px}
+}
+@media (max-width:760px){
+  body{overflow:auto}
+  .app-header{flex-wrap:wrap;padding:8px 10px;position:sticky;top:0}
+  .helpbody{position:fixed;left:12px;right:12px;top:calc(var(--header-h) + 8px);width:auto;max-height:calc(100dvh - var(--header-h) - 24px)}
+  .header-center{order:3;width:100%;margin-left:0}
+  .header-actions{margin-left:auto}
+  .header-actions .btn .btn-label{display:none}
+  .header-actions .btn{width:34px;padding:0}
+  .header-actions .btn.primary{width:auto;padding:6px 10px}
+  .header-actions .btn.primary .btn-label{display:inline}
+  main{display:flex;flex-direction:column;overflow:visible}
+  body.design-closed main{display:flex}
+  .editor-pane{height:48vh;min-height:360px;border-right:0;border-bottom:1px solid var(--line);flex:0 0 auto}
+  .preview-pane{min-height:60vh;overflow:auto;padding:14px 8px 44px;flex:1 0 auto}
+  .pane-actions .btn .btn-label{display:none}
+  .pane-actions .btn{width:30px;padding:0}
+  .preview-toolbar{align-items:center;width:100%;max-width:100%;flex-wrap:wrap;row-gap:6px}
+  .preview-toolbar .spacer{display:none}
+  .preview-toolbar .btn{margin-left:auto}
+}
+@media (max-width:480px){
+  .brand-copy{display:none}
+  .stats{font-size:11px}
+}
+
+/* ============================= Print ============================= */
+@page{size:A4;margin:0}
+@media print{
+  body{background:#fff;display:block;overflow:visible}
+  .app-header,.inspector,.editor-pane,.preview-toolbar,.toast,.fatal-error{display:none !important}
+  main{display:block}
+  .preview-pane{overflow:visible;padding:0;background:#fff;background-image:none}
+  .pages{zoom:1 !important;width:auto;margin:0}
+  .page{box-shadow:none;margin:0;border-radius:0;page-break-after:always;break-after:page}
+  .page:last-child{page-break-after:auto;break-after:auto}
+  .overflow-note{outline:none}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="brand-wrap">
+    <div class="logo-mark" aria-hidden="true">G/</div>
+    <div class="brand-copy">
+      <h1>G/<span class="brand-note">note.</span></h1>
+      <p>Markdown + LaTeX → print-ready notes</p>
+    </div>
+  </div>
+
+  <div class="header-center">
+    <span class="stats" id="stats">— words · — formulas · — pages</span>
+    <button class="errbadge" id="errbadge" title="Show rendering problems"></button>
+  </div>
+
+  <div class="header-actions">
+    <button class="btn" id="btn-notes" title="Create, open and rename notes" aria-haspopup="dialog">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M8 4h11a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H8"/><path d="M8 4v16H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3Z"/><path d="M11 8h5M11 12h5M11 16h3"/></svg>
+      <span class="btn-label">Notes</span>
+    </button>
+
+    <button class="btn icon-only" id="btn-theme" aria-pressed="false" title="Switch to dark mode" aria-label="Toggle dark mode">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M20.4 14.6A8.6 8.6 0 0 1 9.4 3.6 8.9 8.9 0 1 0 20.4 14.6Z"/></svg>
+    </button>
+
+    <button class="btn" id="btn-design" aria-expanded="true" title="Show or hide design controls">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      <span class="btn-label">Design</span>
+    </button>
+
+    <details class="help-menu" id="helpbox">
+      <summary class="btn icon-only" title="Syntax help" aria-label="Syntax help">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2A2.6 2.6 0 1 1 12 14.2v.3"/><path d="M12 17.2h.01"/></svg>
+      </summary>
+      <div class="helpbody">
+        <h3>What you can paste</h3>
+        <ul>
+          <li><b>Headings:</b> <code>#</code> title / section, <code>##</code> ruled GPAI section, <code>###</code> sub-section.</li>
+          <li><b>Math:</b> inline <code>$F=ma$</code> or <code>\(F=ma\)</code>; display <code>$$E_k=\tfrac12 mv^2$$</code> or <code>\[...\]</code>; also <code>\begin{aligned}…\end{aligned}</code>, <code>cases</code>, <code>pmatrix</code> etc. (KaTeX).</li>
+          <li><b>Tables:</b> normal Markdown (GFM) tables. Narrow (2–3 col) tables fit best; wide tables auto-shrink/wrap.</li>
+          <li><b>Images:</b> <code>![caption](https://…)</code>, or use the image button, or <b>paste / drag an image</b> into the editor — it embeds automatically and shows up as a short <code>![name](gnote-img:…)</code> tag in the editor (the preview and the PDF still show the full image).</li>
+          <li><b>Links:</b> <code>[text](https://…)</code> — clickable in the exported PDF.</li>
+          <li><b>Breaks:</b> <code>&lt;!-- column-break --&gt;</code> and <code>&lt;!-- page-break --&gt;</code> on their own line force a new column/page; <code>&lt;!-- keep-topic --&gt;</code> above a section keeps that whole section in one column (the ▤ button in the editor inserts it at your cursor line).</li>
+          <li><b>Raw HTML</b> (e.g. an inline <code>&lt;svg&gt;</code> diagram) passes through after sanitising.</li>
+        </ul>
+        <h3>Design controls</h3>
+        <p>Start with a preset, then fine-tune. Design controls affect the sheet only — not this interface. You can change the sheet <b>background colour</b> and <b>font</b> (Serif is the exact GPAI original), spacing <b>between words</b>, <b>after sentences</b> and <b>after paragraphs</b>, and text <b>boldness</b> — body weight changes ordinary text, while emphasis and heading weights can be tuned separately under <b>Typography → Emphasis</b>.</p>
+        <p>Two flow modes live in the panel: <b>Line flow → Whole words</b> stops words being hyphenated across lines (“quanti-tative”), and <b>Layout → Keep topics intact</b> moves a section that no longer fits in a column to the top of the next one instead of starting it at the column foot. Both are off by default because the GPAI original hyphenates and splits freely; turn them on when you prefer the cleaner look. The <b>GPAI preset</b> (and a full reset) restores the original look exactly: white sheet, serif, single sentence spacing.</p>
+        <h3>Notes, autosave &amp; undo</h3>
+        <ul>
+          <li>Everything — content, note names, design — is <b>saved automatically in this browser</b>. No account, and refreshing or closing the tab never loses work.</li>
+          <li><b>Notes</b> (top bar) creates, opens, renames and deletes notes. The name above the editor renames the open note, and it also becomes the exported PDF / .md filename.</li>
+          <li><b>Undo / redo</b> buttons (or Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y) step through up to 3 edits in each direction — and they survive a reload.</li>
+          <li>The moon button toggles <b>dark mode</b> for the interface. The sheet and the exported PDF always keep exactly the colours you designed.</li>
+        </ul>
+        <h3>Getting a perfect PDF</h3>
+        <p>Click <b>Export</b> (above the preview), then in the print dialog choose <b>Save as PDF</b>, paper <b id="help-paper">A4</b>, <b>Margins: None</b>, <b>Scale: 100%</b>, enable <b>Background graphics</b>, disable headers/footers. The PDF keeps selectable text, vector math and clickable links.</p>
+        <h3>GPAI formula block (copy the pattern)</h3>
+        <pre>### The Net Force Formula
+$$\vec{F}=m\vec{a}$$
+- **Components:**
+  - $\vec{F}$: Net force, in Newtons (N).
+  - $m$: Mass, in kilograms (kg).
+- **Application:** Find acceleration from a known force.</pre>
+      </div>
+    </details>
+
+  </div>
+
+  <input type="file" id="file-md" accept=".md,.markdown,.txt,text/plain" hidden>
+  <input type="file" id="file-img" accept="image/*" hidden>
+</header>
+
+<main>
+  <!-- ================= Content ================= -->
+  <section class="editor-pane" aria-label="Markdown editor">
+    <div class="pane-head">
+      <div class="pane-title">
+        <span class="pane-kicker">01</span>
+        <strong>Content</strong>
+        <input id="note-title" class="note-title" maxlength="120" spellcheck="false"
+               title="Name this note — click to rename" aria-label="Note name" value="Untitled note">
+      </div>
+      <div class="pane-actions">
+        <button class="btn small ghost icon-only" id="btn-undo" title="Undo (Ctrl+Z) — up to 3 edits" aria-label="Undo" disabled>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M8 7 4 11l4 4"/><path d="M4 11h9a6 6 0 0 1 0 12h-3"/></svg>
+        </button>
+        <button class="btn small ghost icon-only" id="btn-redo" title="Redo (Ctrl+Shift+Z) — up to 3 edits" aria-label="Redo" disabled>
+          <svg class="icon" viewBox="0 0 24 24"><path d="m16 7 4 4-4 4"/><path d="M20 11h-9a6 6 0 0 0 0 12h3"/></svg>
+        </button>
+        <span class="act-sep" aria-hidden="true"></span>
+        <button class="btn small ghost" id="btn-sample" title="Load the built-in Unit 4 sample">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+          <span class="btn-label">Sample</span>
+        </button>
+        <button class="btn small ghost" id="btn-import" title="Import a Markdown or text file">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M12 16V5"/><path d="m7 9 5-5 5 5"/><path d="M4 19h16"/></svg>
+          <span class="btn-label">Import</span>
+        </button>
+        <button class="btn small ghost" id="btn-image" title="Insert an image at the cursor">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m5 18 5-5 3 3 2.5-2.5L21 19"/></svg>
+          <span class="btn-label">Image</span>
+        </button>
+        <button class="btn small ghost icon-only" id="btn-topic" title="Keep this topic in one column — inserts a keep-topic tag above the current line" aria-label="Keep topic in one column">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8"/><path d="M8 13h8"/><path d="M8 17h4"/></svg>
+        </button>
+        <button class="btn small ghost" id="btn-download-md" title="Save the editor content as Markdown">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5Z"/><path d="M8 3v6h8"/><path d="M8 21v-7h8v7"/></svg>
+          <span class="btn-label">Save .md</span>
+        </button>
+        <button class="btn small ghost icon-only" id="btn-clear" title="Clear editor" aria-label="Clear editor">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <textarea id="editor" spellcheck="false" placeholder="Paste Markdown + LaTeX here…" aria-label="Cheat sheet Markdown and LaTeX content"></textarea>
+
+    <div class="editor-footer">
+      <span class="dot" aria-hidden="true"></span>
+      <span>Saved in this browser · Paste or drop images &amp; .md files</span>
+      <span class="editor-meta" id="editor-meta">0 lines</span>
+    </div>
+  </section>
+
+  <!-- ================= Design ================= -->
+  <aside class="inspector" id="controls" aria-label="Design controls">
+    <div class="inspector-head">
+      <div class="inspector-head-row">
+        <div>
+          <h2>Design <span class="accent-serif">studio</span></h2>
+          <p>Style the sheet without changing your content.</p>
+        </div>
+        <button type="button" class="btn small ghost icon-only inspector-close" id="btn-close-design" aria-label="Close design panel" title="Close design panel">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></svg>
+        </button>
+      </div>
+      <div class="preset-label">Preset</div>
+      <div class="preset-grid" role="group" aria-label="Style presets">
+        <button type="button" class="preset-chip" data-preset="gpai">GPAI</button>
+        <button type="button" class="preset-chip" data-preset="compact">Compact</button>
+        <button type="button" class="preset-chip" data-preset="readable">Readable</button>
+        <button type="button" class="preset-chip" data-preset="spacious">Spacious</button>
+      </div>
+    </div>
+
+    <details class="design-section" open>
+      <summary>
+        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>
+        Layout
+      </summary>
+      <div class="section-body">
+        <div class="field">
+          <div class="field-head"><label>Columns</label></div>
+          <div class="segmented" id="seg-cols" role="group" aria-label="Number of columns">
+            <button type="button" data-value="2">2</button>
+            <button type="button" data-value="3">3</button>
+            <button type="button" data-value="4">4</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label>Paper</label></div>
+          <div class="segmented" id="seg-paper" role="group" aria-label="Paper size">
+            <button type="button" data-value="a4">A4</button>
+            <button type="button" data-value="letter">US Letter</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label>Sheet background</label><output id="val-sheetbg">#FFFFFF</output></div>
+          <div class="swatches" id="sw-sheetbg" role="group" aria-label="Sheet background colour">
+            <button type="button" class="swatch" data-value="#ffffff" style="--sw:#ffffff" title="White — the GPAI original" aria-label="White background"></button>
+            <button type="button" class="swatch" data-value="#fff6e9" style="--sw:#fff6e9" title="Cream" aria-label="Cream background"></button>
+            <button type="button" class="swatch" data-value="#fdf0cd" style="--sw:#fdf0cd" title="Butter" aria-label="Butter background"></button>
+            <button type="button" class="swatch" data-value="#eef3ec" style="--sw:#eef3ec" title="Sage" aria-label="Sage background"></button>
+            <button type="button" class="swatch" data-value="#edf1f6" style="--sw:#edf1f6" title="Mist" aria-label="Mist background"></button>
+            <label class="swatch swatch-custom" title="Custom colour"><input type="color" id="opt-sheetbg-custom" value="#ffffff" aria-label="Custom sheet background colour"></label>
+          </div>
+          <div class="field-hint">The printed page colour. White matches the original GPAI sheet exactly — keep “Background graphics” ON when exporting a tinted sheet.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-margin">Page margin</label><output id="val-margin" for="opt-margin">10mm</output></div>
+          <input type="range" id="opt-margin" min="8" max="15" step="0.5" value="10">
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-colgap">Space between columns</label><output id="val-colgap" for="opt-colgap">4.8mm</output></div>
+          <input type="range" id="opt-colgap" min="3" max="8" step="0.2" value="4.8">
+        </div>
+        <label class="switch-row">
+          <span class="switch-copy"><strong>Keep topics intact</strong><span>A section that no longer fits in a column moves whole to the top of the next one (instead of starting at the column foot). Sections taller than a column still split.</span></span>
+          <span class="switch"><input type="checkbox" id="opt-topicfit"><i></i></span>
+        </label>
+      </div>
+    </details>
+
+    <details class="design-section" open>
+      <summary>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M5 5V3h14v2"/><path d="M12 3v18"/><path d="M9 21h6"/></svg>
+        Typography
+      </summary>
+      <div class="section-body">
+        <div class="field">
+          <div class="field-head"><label>Font</label></div>
+          <div class="segmented seg-fonts" id="seg-fontfamily" role="group" aria-label="Sheet font">
+            <button type="button" data-value="serif">Serif · GPAI</button>
+            <button type="button" data-value="sans">Sans</button>
+            <button type="button" data-value="georgia">Georgia</button>
+            <button type="button" data-value="jakarta">Jakarta</button>
+          </div>
+          <div class="field-hint">Serif is the exact GPAI original (Liberation Serif). Formulas always typeset in KaTeX.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-font">Font size</label><output id="val-font" for="opt-font">6.5pt</output></div>
+          <input type="range" id="opt-font" min="6" max="9" step="0.25" value="6.5">
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-line">Line spacing</label><output id="val-line" for="opt-line">1.24×</output></div>
+          <input type="range" id="opt-line" min="1.05" max="1.6" step="0.01" value="1.24">
+          <div class="field-hint">This is the previous “density” control, now adjustable precisely.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-word">Space between words</label><output id="val-word" for="opt-word">0em</output></div>
+          <input type="range" id="opt-word" min="-0.05" max="0.3" step="0.01" value="0">
+          <div class="field-hint">Adds or removes base word space. Justified text may stretch it to fill each line.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-sentence">Space after sentences</label><output id="val-sentence" for="opt-sentence">0em</output></div>
+          <input type="range" id="opt-sentence" min="0" max="0.6" step="0.02" value="0">
+          <div class="field-hint">Extra space after <b>. ! ?</b> before the next sentence — classic double-spacing, adjustable. 0 is the GPAI original.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-paragraph">Space after paragraphs</label><output id="val-paragraph" for="opt-paragraph">0.42em</output></div>
+          <input type="range" id="opt-paragraph" min="0" max="1.2" step="0.01" value="0.42">
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-body-weight">Body text boldness</label><output id="val-body-weight" for="opt-body-weight">400</output></div>
+          <input type="range" id="opt-body-weight" min="400" max="700" step="50" value="400">
+          <div class="field-hint">400 is GPAI regular; 700 makes ordinary body text fully bold.</div>
+        </div>
+
+        <details class="subdetails">
+          <summary>More spacing</summary>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-letter">Space between letters</label><output id="val-letter" for="opt-letter">0em</output></div>
+            <input type="range" id="opt-letter" min="-0.03" max="0.08" step="0.005" value="0">
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-list-gap">Space between list items</label><output id="val-list-gap" for="opt-list-gap">0.14em</output></div>
+            <input type="range" id="opt-list-gap" min="0" max="0.6" step="0.01" value="0.14">
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-list-indent">List indentation</label><output id="val-list-indent" for="opt-list-indent">1.35em</output></div>
+            <input type="range" id="opt-list-indent" min="0.8" max="2.4" step="0.05" value="1.35">
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-heading-before">Space before headings</label><output id="val-heading-before" for="opt-heading-before">0.95em</output></div>
+            <input type="range" id="opt-heading-before" min="0" max="1.8" step="0.01" value="0.95">
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-heading-after">Space after headings</label><output id="val-heading-after" for="opt-heading-after">0.40em</output></div>
+            <input type="range" id="opt-heading-after" min="0" max="1" step="0.01" value="0.4">
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-first-indent">Paragraph first-line indent</label><output id="val-first-indent" for="opt-first-indent">0em</output></div>
+            <input type="range" id="opt-first-indent" min="0" max="1.5" step="0.05" value="0">
+          </div>
+        </details>
+
+        <details class="subdetails">
+          <summary>Emphasis &amp; headings</summary>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-emphasis-weight">Bold emphasis weight</label><output id="val-emphasis-weight" for="opt-emphasis-weight">700</output></div>
+            <input type="range" id="opt-emphasis-weight" min="500" max="900" step="50" value="700">
+            <div class="field-hint">Controls <b>**bold**</b> Markdown and table headers.</div>
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-heading-weight">Heading weight</label><output id="val-heading-weight" for="opt-heading-weight">700</output></div>
+            <input type="range" id="opt-heading-weight" min="500" max="900" step="50" value="700">
+          </div>
+        </details>
+
+        <label class="switch-row">
+          <span class="switch-copy"><strong>Justify text</strong><span>Align both left and right edges</span></span>
+          <span class="switch"><input type="checkbox" id="opt-justify" checked><i></i></span>
+        </label>
+        <div class="field" style="margin-top:9px">
+          <div class="field-head"><label>Line flow</label></div>
+          <div class="segmented" id="seg-hyphens" role="group" aria-label="Line flow">
+            <button type="button" data-value="hyphenated" aria-pressed="true">Hyphenate · GPAI</button>
+            <button type="button" data-value="whole" aria-pressed="false">Whole words</button>
+          </div>
+          <p class="field-hint">Whole words never breaks a word across lines (no “quanti-tative”); justified lines may stretch a little more. Hyphenate is the exact GPAI original.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="design-section" open>
+      <summary>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16M4 12h10M4 19h16"/><path d="M18.5 9.5v5"/></svg>
+        Content spacing
+      </summary>
+      <div class="section-body">
+        <p class="section-note">Control breathing room around formulas and tables independently from paragraphs.</p>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-math-gap">Space around display formulas</label><output id="val-math-gap" for="opt-math-gap">0.35em</output></div>
+          <input type="range" id="opt-math-gap" min="0" max="1" step="0.01" value="0.35">
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-table-pad">Table cell padding</label><output id="val-table-pad" for="opt-table-pad">0.22em</output></div>
+          <input type="range" id="opt-table-pad" min="0.05" max="0.6" step="0.01" value="0.22">
+        </div>
+
+        <label class="switch-row">
+          <span class="switch-copy"><strong>Section rules</strong><span>Thin line above major sections</span></span>
+          <span class="switch"><input type="checkbox" id="opt-rules" checked><i></i></span>
+        </label>
+      </div>
+    </details>
+
+    <details class="design-section">
+      <summary>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7Z"/><path d="M15 3v5h5"/><path d="M9 17h9"/></svg>
+        Page details
+      </summary>
+      <div class="section-body">
+        <div class="field">
+          <div class="field-head"><label for="opt-footer">Footer text</label></div>
+          <input class="text-input" type="text" id="opt-footer" maxlength="300" placeholder="e.g. G11 Physics · your name">
+        </div>
+
+        <label class="switch-row">
+          <span class="switch-copy"><strong>Page numbers</strong><span>Shown at the bottom-right of each page</span></span>
+          <span class="switch"><input type="checkbox" id="opt-pageno"><i></i></span>
+        </label>
+      </div>
+    </details>
+
+    <details class="design-section">
+      <summary>
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-3.8-3.8"/><path d="M11 8.5v5M8.5 11h5"/></svg>
+        Preview
+      </summary>
+      <div class="section-body">
+        <div class="field">
+          <div class="field-head"><label for="opt-zoom">Zoom</label><output id="val-zoom" for="opt-zoom">100%</output></div>
+          <input type="range" id="opt-zoom" min="0.35" max="1.3" step="0.01" value="1">
+        </div>
+        <div class="view-actions">
+          <button type="button" class="btn small" id="btn-fit">Fit page</button>
+          <button type="button" class="btn small" id="btn-zoom-100">100%</button>
+        </div>
+        <div class="field-hint"><b>Fit page</b> keeps the whole sheet visible as the window or Design panel changes. Moving the slider switches to manual zoom. Either way, the PDF always exports at true page size.</div>
+      </div>
+    </details>
+
+    <div class="inspector-foot">
+      <button type="button" class="btn reset-btn" id="btn-reset-style">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 4v6h6"/><path d="M5.5 10a8 8 0 1 1-.5 5"/></svg>
+        Reset all design settings
+      </button>
+    </div>
+  </aside>
+
+  <!-- ================= Preview ================= -->
+  <section class="preview-pane" id="preview-pane" aria-label="Rendered sheet preview">
+    <div class="preview-toolbar">
+      <span class="spacer"></span>
+      <button class="btn primary" id="btn-print" title="Open print dialog to save as PDF">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>
+        <span class="btn-label">Export</span>
+      </button>
+    </div>
+    <div class="pages" id="pages"></div>
+  </section>
+</main>
+<dialog id="notesdlg" aria-label="Your notes">
+  <div class="notes-dlg-head">
+    <h3>Your <span class="accent-serif">notes</span></h3>
+    <button class="btn small ghost icon-only" id="btn-notes-close" aria-label="Close" title="Close">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="notes-list" id="notes-list"></div>
+  <div class="notes-dlg-foot">
+    <button class="btn small primary" id="btn-new-note">+ New note</button>
+    <span class="hint">Notes are saved in this browser automatically — no account needed.</span>
+  </div>
+</dialog>
+
+<dialog id="errors">
+  <h3 style="margin-top:0">Rendering problems</h3>
+  <p style="font-size:13px;color:#555">These formulas/items could not be rendered cleanly. Fix them in the editor — usually an unclosed <code>$</code>, a missing brace, or a LaTeX command KaTeX doesn't support.</p>
+  <ul id="errlist"></ul>
+  <button class="btn" id="btn-close-errors">Close</button>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="vendor/marked.min.js"></script>
+<script src="vendor/purify.min.js"></script>
+<script src="vendor/katex.min.js"></script>
+<script>
+"use strict";
+/* ================================================================
+   G/note.
+   Pipeline:  protect code+math → Marked (GFM) → DOMPurify →
+              restore code, render math with KaTeX →
+              post-process (figures/tables/links) →
+              deterministic pagination into A4 pages × N columns →
+              browser Print-to-PDF (@page, vector text/math/links)
+   Measured from the reference GPAI PDF: Liberation Serif 6.5pt,
+   A4, 10mm margins, 3 columns, ≈4.8mm gutters, KaTeX math.
+   ================================================================ */
+const $ = s => document.querySelector(s);
+const editor = $("#editor"), pagesEl = $("#pages");
+const LS_CONTENT = "cs-studio:content:v1", LS_SETTINGS = "cs-studio:settings:v1";
+let renderErrors = [];
+let repaginateQueued = false;
+let storageWarningShown = false;
+
+function lsGet(key){
+  try { return localStorage.getItem(key); } catch(e) { return null; }
+}
+function lsSet(key, value, warnOnFailure = false){
+  try {
+    localStorage.setItem(key, value);
+    storageWarningShown = false;
+    return true;
+  } catch(e) {
+    if (warnOnFailure && !storageWarningShown){
+      storageWarningShown = true;
+      setTimeout(() => { try { toast("Autosave unavailable (browser storage is full or blocked). Use Save .md to keep a copy."); } catch(_){} }, 0);
+    }
+    return false;
+  }
+}
+function saveContent(){
+  const ok = lsSet(LS_CONTENT, editor.value, true); // immediate mirror — a refresh can never lose typed work
+  scheduleNotesSave();                              // the notes library write is throttled + flushed on hide
+  return ok;
+}
+
+/* ---------------- notes library (no account, no server) ----------------
+   Current note content mirrors `cs-studio:content:v1` (kept for old saves),
+   the library itself lives in `cs-studio:notes:v1`, undo/redo in
+   `cs-studio:history:v1`. Everything is plain localStorage = synchronous,
+   so nothing is ever pending when the tab reloads or the browser closes. */
+const LS_NOTES = "cs-studio:notes:v1", LS_HISTORY = "cs-studio:history:v1", LS_IMAGES = "cs-studio:images:v1";
+const HIST_MAX = 3;               // up to 3 undo steps and 3 redo steps, persisted
+let NOTES_STORE = null;           // {v:1,current:noteId,notes:[{id,title,content,created,updated}]}
+let curNote = null;               // the open note object (a reference inside NOTES_STORE)
+let notesSaveTimer = null;
+let HIST_STORE = {};              // noteId -> {undo:[...], redo:[...]}
+let burstTimer = null;            // coalesces a typing burst into one undo step
+let committedBase = "";           // content of the last committed undo checkpoint
+
+function uid(prefix){ return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function deriveTitle(text){
+  const m = /^#{1,3}\s+(.+)$/m.exec(text || "");
+  let t = (m ? m[1] : (String(text || "").split("\n").find(l => l.trim()) || "")).trim();
+  t = t.replace(/[*_`$\\]/g, "").replace(/\s+/g, " ").slice(0, 80);
+  return t || "Untitled note";
+}
+function makeNote(title, content){
+  return { id: uid("n"), title: String(title || "Untitled note").slice(0, 120), content: String(content || ""), created: Date.now(), updated: Date.now() };
+}
+function loadNotesStore(){
+  try {
+    const raw = lsGet(LS_NOTES);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.notes)) return null;
+    const notes = parsed.notes
+      .filter(n => n && typeof n === "object" && typeof n.id === "string" && typeof n.content === "string")
+      .map(n => ({
+        id: n.id,
+        title: (typeof n.title === "string" && n.title.trim()) ? n.title.slice(0, 120) : deriveTitle(n.content),
+        content: n.content,
+        created: Number.isFinite(+n.created) ? +n.created : Date.now(),
+        updated: Number.isFinite(+n.updated) ? +n.updated : Date.now()
+      }));
+    if (!notes.length) return null;
+    let current = typeof parsed.current === "string" ? parsed.current : notes[0].id;
+    if (!notes.some(n => n.id === current)) current = notes[0].id;
+    return { v: 1, current, notes };
+  } catch(e){ return null; }
+}
+function saveNotesStore(){
+  if (!NOTES_STORE) return;
+  if (curNote) { curNote.content = editor.value; curNote.updated = Date.now(); }
+  lsSet(LS_NOTES, JSON.stringify(NOTES_STORE), true);
+}
+function scheduleNotesSave(){
+  if (notesSaveTimer) return;
+  notesSaveTimer = setTimeout(() => { notesSaveTimer = null; saveNotesStore(); }, 350);
+}
+function flushNotesSave(){
+  if (notesSaveTimer){ clearTimeout(notesSaveTimer); notesSaveTimer = null; }
+  saveNotesStore();
+}
+function initNotes(){
+  NOTES_STORE = loadNotesStore();
+  const mirror = lsGet(LS_CONTENT);         // immediate mirror is the freshest copy of the open note
+  if (!NOTES_STORE){
+    let content = mirror;
+    if (content === null) content = SAMPLE; // first ever run
+    const note = makeNote(deriveTitle(content), content);
+    NOTES_STORE = { v: 1, current: note.id, notes: [note] };
+  }
+  curNote = NOTES_STORE.notes.find(n => n.id === NOTES_STORE.current) || NOTES_STORE.notes[0];
+  NOTES_STORE.current = curNote.id;
+  if (mirror !== null && mirror !== curNote.content){ curNote.content = mirror; curNote.updated = Date.now(); }
+  editor.value = curNote.content;
+  lsSet(LS_CONTENT, curNote.content, true); // (re)establish the mirror
+  saveNotesStore();
+  const titleEl = $("#note-title"); if (titleEl) titleEl.value = curNote.title;
+}
+function switchToNote(id){
+  const note = NOTES_STORE ? NOTES_STORE.notes.find(n => n.id === id) : null;
+  if (!note || note === curNote) return;
+  commitPendingEdit(); flushNotesSave(); persistHistory();
+  curNote = note; NOTES_STORE.current = note.id;
+  editor.value = note.content; committedBase = note.content;
+  const titleEl = $("#note-title"); if (titleEl) titleEl.value = note.title;
+  lsSet(LS_CONTENT, note.content, true); saveNotesStore();
+  updateHistUI(); renderNow().catch(reportRenderError);
+}
+function createNote(){
+  commitPendingEdit(); flushNotesSave();
+  const note = makeNote("Untitled note", "");
+  NOTES_STORE.notes.push(note);
+  curNote = note; NOTES_STORE.current = note.id;
+  editor.value = ""; committedBase = "";
+  const titleEl = $("#note-title"); if (titleEl) titleEl.value = note.title;
+  lsSet(LS_CONTENT, "", true); saveNotesStore();
+  updateHistUI(); renderNow().catch(reportRenderError);
+  return note;
+}
+function deleteNote(id){
+  if (!NOTES_STORE) return;
+  const idx = NOTES_STORE.notes.findIndex(n => n.id === id);
+  if (idx < 0) return;
+  NOTES_STORE.notes.splice(idx, 1);
+  if (id === (curNote && curNote.id)){
+    if (NOTES_STORE.notes.length) switchToNote(NOTES_STORE.notes[Math.max(0, idx - 1)].id);
+    else createNote();
+  }
+  delete HIST_STORE[id];   // after any switch, so no orphan entry is re-created
+  saveNotesStore(); persistHistory();
+}
+function renameCurrent(raw){
+  const t = String(raw || "").trim().slice(0, 120);
+  const el = $("#note-title");
+  if (!t || !curNote){ if (el && curNote) el.value = curNote.title; return; }
+  if (t === curNote.title) return;
+  curNote.title = t; saveNotesStore(); renderNotesList();
+}
+function safeFileName(name){
+  return String(name || "").replace(/[\\/:*?"<>|]/g, "").replace(/^\.+/, "").replace(/\.+$/, "").trim().slice(0, 80);
+}
+
+/* ---------------- undo / redo (3 steps each way, survives reloads) ---------------- */
+function loadHistoryStore(){
+  try {
+    const parsed = JSON.parse(lsGet(LS_HISTORY) || "null");
+    if (!parsed || typeof parsed !== "object" || !parsed.notes || typeof parsed.notes !== "object") return {};
+    const clean = arr => Array.isArray(arr) ? arr.filter(x => typeof x === "string").slice(-HIST_MAX) : [];
+    const out = {};
+    Object.entries(parsed.notes).forEach(([id, h]) => {
+      if (typeof id === "string" && h && typeof h === "object") out[id] = { undo: clean(h.undo), redo: clean(h.redo) };
+    });
+    return out;
+  } catch(e){ return {}; }
+}
+function histFor(id){ if (!HIST_STORE[id]) HIST_STORE[id] = { undo: [], redo: [] }; return HIST_STORE[id]; }
+function persistHistory(){
+  const build = () => JSON.stringify({ v: 1, notes: HIST_STORE });
+  let raw = build(), guard = 0;
+  // Undo history must never be the thing that fills the quota: trim oldest
+  // steps (redo first) until it fits, then write silently.
+  while (raw.length > 2400000 && guard++ < 80){
+    let target = null, best = 0;
+    Object.values(HIST_STORE).forEach(h => ["redo", "undo"].forEach(k => {
+      if (h[k].length > best){ best = h[k].length; target = h[k]; }
+    }));
+    if (!target || target.length < 1) break;
+    target.shift();
+    raw = build();
+  }
+  if (!lsSet(LS_HISTORY, raw, false)) console.warn("G/note.: undo history kept in memory only (storage full).");
+}
+function updateHistUI(){
+  const h = curNote ? histFor(curNote.id) : { undo: [], redo: [] };
+  const u = $("#btn-undo"), r = $("#btn-redo");
+  if (u) u.disabled = !h.undo.length;
+  if (r) r.disabled = !h.redo.length;
+}
+function doPush(snap){
+  if (!curNote) return;
+  const h = histFor(curNote.id);
+  h.undo.push(snap);
+  while (h.undo.length > HIST_MAX) h.undo.shift();
+  h.redo.length = 0;               // a new edit invalidates the redo branch
+  persistHistory(); updateHistUI();
+}
+function sealBurst(){
+  if (editor.value !== committedBase){
+    const snap = committedBase;
+    committedBase = editor.value;
+    doPush(snap);
+  }
+}
+function commitPendingEdit(){
+  if (burstTimer){ clearTimeout(burstTimer); burstTimer = null; }
+  sealBurst();
+}
+function histNoteInput(){
+  clearTimeout(burstTimer);
+  burstTimer = setTimeout(() => { burstTimer = null; sealBurst(); }, 900);
+}
+function applyHistoryState(value){
+  editor.value = value; committedBase = value;
+  saveContent(); renderNow().catch(reportRenderError);
+  updateHistUI();
+}
+function doUndo(){
+  if (!curNote) return;
+  commitPendingEdit();
+  const h = histFor(curNote.id);
+  if (!h.undo.length) return;
+  h.redo.push(editor.value);
+  while (h.redo.length > HIST_MAX) h.redo.shift();
+  applyHistoryState(h.undo.pop());
+  persistHistory();
+}
+function doRedo(){
+  if (!curNote) return;
+  commitPendingEdit();
+  const h = histFor(curNote.id);
+  if (!h.redo.length) return;
+  h.undo.push(editor.value);
+  while (h.undo.length > HIST_MAX) h.undo.shift();
+  applyHistoryState(h.redo.pop());
+  persistHistory();
+}
+/* Wrap whole-content operations (sample / clear / import) as one undo step. */
+function applyContentEdit(fn){
+  commitPendingEdit();
+  const prev = editor.value;
+  fn();
+  if (editor.value !== prev) doPush(prev);
+  committedBase = editor.value;
+}
+
+/* ---------------- embedded images: short tags in the editor, data in the browser store ----
+   Pasted/dropped images used to paste a megabyte of base64 into the editor.
+   Now the editor holds `![alt](gnote-img:<id>)` and the bytes live in
+   IndexedDB (localStorage fallback). renderMarkdown() swaps the tag back to
+   the data URI before Markdown runs, so the rendered sheet — and the printed
+   PDF — are exactly what they were with inline blobs. */
+const IMAGE_REF = /(!\[[^\]\n]*\]\()gnote-img:([A-Za-z0-9_-]{1,64})\)/g;
+const DATA_URI_IMG = /(!\[[^\]\n]*\]\()(data:image\/[a-z0-9.+_-]+;base64,[A-Za-z0-9+/=]+)\)/gi;
+const IMG_MAP = new Map();
+let imgBackend = "idb", imgDb = null;
+function imgIdbOpen(){
+  return new Promise((resolve, reject) => {
+    let req;
+    try { req = indexedDB.open("gnote-images", 1); } catch(e){ reject(e); return; }
+    req.onupgradeneeded = () => { try { req.result.createObjectStore("images", { keyPath: "id" }); } catch(_){} };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("IndexedDB unavailable"));
+    req.onblocked = () => reject(new Error("IndexedDB blocked"));
+  });
+}
+function imgIdbAll(db){
+  return new Promise((resolve, reject) => {
+    try {
+      const rq = db.transaction("images", "readonly").objectStore("images").getAll();
+      rq.onsuccess = () => resolve(rq.result || []);
+      rq.onerror = () => reject(rq.error);
+    } catch(e){ reject(e); }
+  });
+}
+function imgIdbPut(db, id, data){
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction("images", "readwrite");
+      tx.objectStore("images").put({ id, data });
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error("write aborted"));
+    } catch(e){ reject(e); }
+  });
+}
+function imgLsDump(){
+  try {
+    const obj = JSON.parse(lsGet(LS_IMAGES) || "{}");
+    return obj && typeof obj === "object" && !Array.isArray(obj) ? obj : {};
+  } catch(e){ return {}; }
+}
+async function imgStoreInit(){
+  try {
+    const race = p => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("storage timeout")), 2500))]);
+    const db = await race(imgIdbOpen());
+    const rows = await race(imgIdbAll(db));
+    rows.forEach(r => { if (r && typeof r.id === "string" && typeof r.data === "string") IMG_MAP.set(r.id, r.data); });
+    imgDb = db; imgBackend = "idb";
+  } catch(e){
+    imgDb = null; imgBackend = "ls";   // file:// and blocked-storage browsers still work via localStorage
+    const dump = imgLsDump();
+    Object.entries(dump).forEach(([id, data]) => { if (typeof data === "string") IMG_MAP.set(id, data); });
+  }
+}
+const IMG_READY = imgStoreInit();
+function makeImgId(){
+  let id;
+  do { id = "i" + Math.random().toString(36).slice(2, 10); } while (IMG_MAP.has(id));
+  return id;
+}
+async function imgPut(id, data){
+  IMG_MAP.set(id, data);
+  if (imgBackend === "idb" && imgDb){
+    try { await imgIdbPut(imgDb, id, data); return true; }
+    catch(e){ imgDb = null; imgBackend = "ls"; }
+  }
+  const dump = imgLsDump(); dump[id] = data;
+  const ok = lsSet(LS_IMAGES, JSON.stringify(dump), false);
+  if (!ok) IMG_MAP.delete(id);        // caller falls back to an inline blob then
+  return ok;
+}
+function resolveImageRefs(md, errors){
+  if (!/gnote-img:/.test(md)) return md;
+  return md.replace(IMAGE_REF, (m, pre, id) => {
+    const data = IMG_MAP.get(id);
+    if (data) return pre + data + ")";
+    const alt = /^!\[([^\]]*)\]/.exec(m);
+    errors.push("Embedded image" + (alt && alt[1] ? " \"" + alt[1] + "\"" : "") + " (" + id + ") is missing from this browser's storage — re-insert it.");
+    return "";
+  });
+}
+/* Move inline base64 blobs out of note text into the image store (boot + import).
+   Only rewrites the editor once every byte is safely stored, so a crash can
+   never trade visible text for a dangling tag. */
+async function extractInlineImages(text){
+  await IMG_READY;
+  if (!/data:image\//.test(text)) return text;
+  const found = [];
+  const replaced = text.replace(DATA_URI_IMG, (m, pre, data) => {
+    const id = makeImgId();
+    found.push([id, data]);
+    return pre + "gnote-img:" + id + ")";
+  });
+  if (!found.length) return text;
+  for (const [id, data] of found){
+    if (!await imgPut(id, data)) return text;   // keep blobs inline; they still render
+  }
+  return replaced;
+}
+function expandRefs(text){
+  if (!/gnote-img:/.test(text)) return text;
+  return text.replace(IMAGE_REF, (m, pre, id) => { const d = IMG_MAP.get(id); return d ? pre + d + ")" : m; });
+}
+
+const missingLibraries = ["marked", "DOMPurify", "katex"].filter(name => typeof globalThis[name] === "undefined");
+let dependencyError = "";
+if (!missingLibraries.includes("marked")){
+  try { marked.setOptions({ gfm:true, breaks:false, headerIds:false, mangle:false }); }
+  catch(e) { dependencyError = "Marked failed to initialise: " + e.message; }
+}
+if (missingLibraries.length) dependencyError = "Required library failed to load: " + missingLibraries.join(", ") + ". Check that the vendor/ folder is deployed beside index.html.";
+
+/* ---------------- sample (your Unit 4, in paste-ready Markdown) ---------------- */
+const SAMPLE = String.raw`G11, Phy, U4:
+# Unit 4: Force, Work, Energy, and Power
+
+## The Concept of Force
+A force is a push or a pull exerted on a body that changes its state of motion or causes deformation by changing its shape or size.
+- **Vector Nature:** Force is a vector quantity determined by both magnitude and direction, represented as $\vec{F}$ or bold $\mathbf{F}$. It can be added using the head-to-tail method or trigonometric methods.
+- **Measurement:** Forces are measured using the deformation of a spring. When a force is applied, the spring elongates, and a pointer on a calibrated scale reads the force value.
+- **SI Unit:** The SI unit of force is the newton (N).
+
+### Classification of Forces
+1. **Contact Forces:** Forces that involve direct physical contact between two bodies, with the force experienced only while contact is maintained.
+   - *Examples:* Applied forces, normal forces, frictional forces, and spring forces.
+2. **Non-Contact Forces:** Forces that act on a body without physical contact.
+   - *Examples:* Magnetic force (e.g., attraction of iron to a magnet) and gravitational force (e.g., an object falling back to Earth).
+
+## Newton's First Law of Motion (Law of Inertia)
+A body continues to be in its state of rest or of uniform motion in a straight line unless it is acted on by an unbalanced external force.
+- **Inertia:** An inherent property of matter by which it continues in its existing state of rest or uniform motion in a straight line, resisting any attempt to change its velocity.
+- **Mass as a Measure of Inertia:** Mass is the quantitative measure of an object's resistance to a change in its state of motion. Mass is constant everywhere. Objects with larger masses possess larger inertia and are more resistant to changes in velocity.
+- **Inertial Frames of Reference:** A special set of reference frames in which Newton's first law is valid.
+  - If an object does not interact with other objects, its acceleration is zero in an inertial frame.
+  - Any reference frame moving with a constant velocity relative to an inertial frame is itself an inertial frame.
+
+## Newton's Second Law of Motion
+The acceleration of a body is directly proportional to the net force acting on it and inversely proportional to the mass of the body.
+
+### The Net Force Formula
+$$\vec{F} = m\vec{a}$$
+- **Components:**
+  - $\vec{F}$: Net force acting on the body, measured in Newtons (N) or kilogram-metres per second squared ($\mathrm{kg \cdot m/s^2}$).
+  - $m$: Mass of the body, measured in kilograms (kg).
+  - $\vec{a}$: Acceleration of the body, measured in metres per second squared ($\mathrm{m/s^2}$).
+- **Application:** Used to calculate the acceleration produced when an unbalanced force acts on an object of a known mass. The direction of acceleration is always identical to the direction of the net force.
+- **Definition of 1 Newton:** $1\ \mathrm{N} = 1\ \mathrm{kg \cdot m/s^2}$. It is the force that, acting on an object of mass $1\ \mathrm{kg}$, produces an acceleration of $1\ \mathrm{m/s^2}$.
+
+### Gravitational Force (Weight) Formula
+$$W = mg \qquad \text{or} \qquad F_g = mg$$
+- **Components:**
+  - $W$ (or $F_g$): Weight or gravitational force, measured in Newtons (N).
+  - $m$: Mass of the body, measured in kilograms (kg).
+  - $g$: Acceleration due to gravity, measured in metres per second squared ($\mathrm{m/s^2}$).
+- **Application:** Calculate the magnitude of the gravitational pull on an object directed toward the centre of the Earth.
+- **Earth's Surface Value:** $g \approx 9.8\ \mathrm{m/s^2}$ (or $10\ \mathrm{m/s^2}$ in simplified scenarios).
+- **Variability:** $g$ decreases with height. On the Moon, $g_{\text{Moon}} \approx \tfrac{1}{6} g_{\text{Earth}}$.
+
+## Newton's Third Law of Motion
+Every action has an equal and opposite reaction. Forces always act in pairs.
+
+### Action–Reaction Relationship
+$$F_{12} = -F_{21}$$
+- **Components:**
+  - $F_{12}$: Force exerted by object 1 on object 2, in Newtons (N).
+  - $F_{21}$: Force exerted by object 2 on object 1, in Newtons (N).
+- **Application:** Analyze interacting bodies. Action and reaction are equal in magnitude, opposite in direction, and act on *different* objects — so they never cancel.
+- **Example (Block on Table):** A block exerts a downward force on a table equal to its weight ($W=mg$); the table exerts an equal upward normal force on the block.
+
+## Forces of Friction
+Frictional force ($f$) is the resistance to the motion of an object offered by a contacting surface.
+- **Surface Dependency:** Magnitude depends on the nature of the surfaces (rougher ⇒ larger friction).
+- **Normal Force Dependency:** Friction is directly proportional to the normal force: $f_k = \mu_k F_N$, $0 \le f_s \le \mu_s F_N$.
+
+### Types of Friction
+1. **Static Friction:** Exists when a body tends to slide without moving; requires a relatively large force to overcome.
+2. **Kinetic Friction:** Acts when surfaces slide or roll; its magnitude is less than maximum static friction for the same surfaces.
+
+## Work & Kinetic Energy
+Work is done when an applied force causes a displacement parallel to the force. It is the mechanical transfer of energy.
+
+### Work Formula
+$$W = FS\cos\theta$$
+- **Components:** $W$ in Joules (J); $F$ in Newtons (N); $S$ in metres (m); $\theta$ = angle between $\vec{F}$ and $\vec{S}$.
+- **Special cases:** $\theta=0^\circ \Rightarrow W=FS$ (maximum); $\theta=90^\circ \Rightarrow W=0$; $\theta=180^\circ \Rightarrow W=-FS$ (e.g. friction).
+
+### Kinetic Energy Formula
+$$E_k = \tfrac{1}{2}mv^2$$
+- **Components:** $E_k$ in Joules (J); $m$ in kg; $v$ in m/s.
+- **Application:** Motion-based energy of a moving body. Doubling $v$ quadruples $E_k$.
+
+## Gravitational Potential Energy
+Gravitational potential energy ($E_p$) is the stored energy possessed by an object due to its vertical position relative to a reference level, working against the downward pull of gravity.
+
+### Gravitational Potential Energy Formula
+$$E_p = mgh$$
+- **Components:**
+  - $E_p$: Gravitational potential energy, measured in Joules (J).
+  - $m$: Mass of the object, measured in kilograms (kg).
+  - $g$: Acceleration due to gravity, in metres per second squared ($\mathrm{m/s^2}$).
+  - $h$: Vertical height above the reference level, measured in metres (m).
+- **Application:** Applied to calculate stored energy based on height and mass.
+
+## Mechanical Energy
+Mechanical energy is the total sum of an object's kinetic and potential energies:
+$$E_{\text{mechanical}} = E_k + E_p$$
+
+## Power
+Power is defined as the rate at which work is done or the rate at which energy is being transferred. It is a scalar quantity.
+
+### Power Formula
+$$P = \frac{W}{t} \qquad \text{or} \qquad P = \frac{E}{t}$$
+- **Components:**
+  - $P$: Power, measured in Watts (W) or Joules per second ($\mathrm{J/s}$).
+  - $W$: Work done, measured in Joules (J). $E$: Energy transferred, in Joules (J).
+  - $t$: Time taken for the transfer/work, measured in seconds (s).
+- **Application:** Used to measure how rapidly work is performed or how quickly energy is consumed/produced by machines, motors, or pumps.
+- **Definition of 1 Watt:** $1\ \mathrm{W} = 1\ \mathrm{J/s}$. It represents the power developed when $1\ \mathrm{J}$ of energy is transferred in $1\ \mathrm{s}$.
+
+## Comprehensive Unit Synthesis
+1. **Systematic Classification of Forces:** Mechanical systems are driven by forces classified into contact forces (requiring physical touch — friction, normal force, tension, spring forces) and non-contact forces (field forces acting through space — gravity, magnetism).
+2. **Work–Energy Connection:** Work ($W = F_{\parallel}S$) is the mechanical process of translating forces into energy transfers, changing either kinetic energy ($E_k=\tfrac{1}{2}mv^2$) or potential energy ($E_p=mgh$).
+3. **The Temporal Element (Power):** Performing the same work in half the time requires doubling the power output ($P=W/t$).
+
+### Formula index (table demo)
+| Formula | Use it when |
+|---|---|
+| $\vec{F}=m\vec{a}$ | Net force / acceleration |
+| $W=mg$ | Weight of a mass |
+| $E_k=\frac12 mv^2$ | Energy of motion |
+| $E_p=mgh$ | Stored energy of height |
+| $P=\dfrac{W}{t}$ | Rate of doing work |
+
+## KEY NOTES
+1. **Zero Work Conditions:**
+   1. If displacement is zero, work is zero — holding a heavy book still for two hours does $W=0$.
+   2. If force is perpendicular to displacement, work is zero — the lifting force does no work when carrying a bucket horizontally.
+- **Friction Extremes:** $f_{\text{static}} > f_{\text{kinetic}}$ for the same surfaces.
+- **Misconception:** Action–reaction pairs never cancel — they act on different bodies.
+- **Unit Conversions:** Always convert mass to kg ($200\ \mathrm{g}=0.2\ \mathrm{kg}$).
+- **Links work too:** see the [KaTeX supported functions](https://katex.org/docs/supported.html) reference.
+
+> **How to test this tool:** edit anything on the left and watch pagination update. Paste an image into the editor, add your own display formulas and Markdown tables, drag the Font slider, then **Download PDF (Print)**.
+`;
+
+/* ---------------- settings ---------------- */
+const defaultSettings = {
+  cols:3, paper:"a4", margin:10, columnGap:4.8,
+  font:6.5, lineHeight:1.24, density:"1.24",
+  wordSpacing:0, letterSpacing:0, paragraphSpacing:0.42, sentenceSpacing:0,
+  listGap:0.14, listIndent:1.35, headingBefore:0.95, headingAfter:0.4,
+  firstLineIndent:0, mathSpacing:0.35, tablePadding:0.22,
+  bodyWeight:400, emphasisWeight:700, headingWeight:700,
+  fontFamily:"serif", sheetBg:"#ffffff",
+  rules:true, justify:true, hyphens:true, pageno:false, footer:"", zoom:1, zoomMode:"fit",
+  uiTheme:"light", topicFit:false
+};
+
+const STYLE_PRESETS = {
+  gpai: {
+    cols:3, paper:"a4", margin:10, columnGap:4.8, font:6.5, lineHeight:1.24,
+    wordSpacing:0, letterSpacing:0, paragraphSpacing:0.42, sentenceSpacing:0, listGap:0.14,
+    listIndent:1.35, headingBefore:0.95, headingAfter:0.4, firstLineIndent:0,
+    mathSpacing:0.35, tablePadding:0.22, bodyWeight:400, emphasisWeight:700,
+    headingWeight:700, fontFamily:"serif", sheetBg:"#ffffff",
+    rules:true, justify:true, hyphens:true
+  },
+  compact: {
+    cols:3, paper:"a4", margin:8.5, columnGap:4, font:6.25, lineHeight:1.14,
+    wordSpacing:-0.01, letterSpacing:-0.005, paragraphSpacing:0.2, listGap:0.06,
+    listIndent:1.15, headingBefore:0.65, headingAfter:0.25, firstLineIndent:0,
+    mathSpacing:0.22, tablePadding:0.14, bodyWeight:400, emphasisWeight:700,
+    headingWeight:700, rules:true, justify:true, hyphens:true
+  },
+  readable: {
+    cols:3, paper:"a4", margin:11, columnGap:5.5, font:7.25, lineHeight:1.38,
+    wordSpacing:0.01, letterSpacing:0, paragraphSpacing:0.6, listGap:0.22,
+    listIndent:1.45, headingBefore:1.05, headingAfter:0.45, firstLineIndent:0,
+    mathSpacing:0.45, tablePadding:0.3, bodyWeight:400, emphasisWeight:700,
+    headingWeight:700, rules:true, justify:true, hyphens:true
+  },
+  spacious: {
+    cols:3, paper:"a4", margin:12.5, columnGap:6.5, font:8, lineHeight:1.5,
+    wordSpacing:0.02, letterSpacing:0.005, paragraphSpacing:0.85, listGap:0.32,
+    listIndent:1.6, headingBefore:1.25, headingAfter:0.55, firstLineIndent:0,
+    mathSpacing:0.6, tablePadding:0.38, bodyWeight:400, emphasisWeight:700,
+    headingWeight:700, rules:true, justify:false, hyphens:true
+  }
+};
+
+let storedSettings = {};
+try { storedSettings = JSON.parse(lsGet(LS_SETTINGS) || "{}") || {}; } catch(e) { storedSettings = {}; }
+let S = { ...defaultSettings, ...storedSettings };
+// v1 used a `density` select. Migrate it to the precise line-height slider.
+// (density is kept in storage so older settings remain understandable.)
+if (storedSettings.lineHeight == null && storedSettings.density != null) {
+  const migrated = parseFloat(storedSettings.density);
+  if (Number.isFinite(migrated)) S.lineHeight = migrated;
+}
+S = normalizeSettings(S);
+
+const RANGE_FIELDS = [
+  ["#opt-margin", "margin", "#val-margin", v => trimNum(v, 1) + "mm"],
+  ["#opt-colgap", "columnGap", "#val-colgap", v => trimNum(v, 1) + "mm"],
+  ["#opt-font", "font", "#val-font", v => trimNum(v, 2) + "pt"],
+  ["#opt-line", "lineHeight", "#val-line", v => trimNum(v, 2) + "×"],
+  ["#opt-word", "wordSpacing", "#val-word", v => signedEm(v)],
+  ["#opt-sentence", "sentenceSpacing", "#val-sentence", v => em(v)],
+  ["#opt-letter", "letterSpacing", "#val-letter", v => signedEm(v, 3)],
+  ["#opt-paragraph", "paragraphSpacing", "#val-paragraph", v => em(v)],
+  ["#opt-list-gap", "listGap", "#val-list-gap", v => em(v)],
+  ["#opt-list-indent", "listIndent", "#val-list-indent", v => em(v)],
+  ["#opt-heading-before", "headingBefore", "#val-heading-before", v => em(v)],
+  ["#opt-heading-after", "headingAfter", "#val-heading-after", v => em(v)],
+  ["#opt-first-indent", "firstLineIndent", "#val-first-indent", v => em(v)],
+  ["#opt-math-gap", "mathSpacing", "#val-math-gap", v => em(v)],
+  ["#opt-table-pad", "tablePadding", "#val-table-pad", v => em(v)],
+  ["#opt-body-weight", "bodyWeight", "#val-body-weight", v => weightLabel(v)],
+  ["#opt-emphasis-weight", "emphasisWeight", "#val-emphasis-weight", v => String(Math.round(v))],
+  ["#opt-heading-weight", "headingWeight", "#val-heading-weight", v => String(Math.round(v))],
+  ["#opt-zoom", "zoom", "#val-zoom", v => Math.round(v * 100) + "%"]
+];
+
+function normalizeSettings(raw){
+  const src = (raw && typeof raw === "object" && !Array.isArray(raw)) ? raw : {};
+  const out = { ...defaultSettings };
+  const ranges = {
+    margin:[8,15], columnGap:[3,8], font:[6,9], lineHeight:[1.05,1.6],
+    wordSpacing:[-0.05,0.3], letterSpacing:[-0.03,0.08], paragraphSpacing:[0,1.2], sentenceSpacing:[0,0.6],
+    listGap:[0,0.6], listIndent:[0.8,2.4], headingBefore:[0,1.8], headingAfter:[0,1],
+    firstLineIndent:[0,1.5], mathSpacing:[0,1], tablePadding:[0.05,0.6],
+    bodyWeight:[400,700], emphasisWeight:[500,900], headingWeight:[500,900], zoom:[0.35,1.3]
+  };
+  Object.entries(ranges).forEach(([key, [min, max]]) => {
+    const n = Number(src[key]);
+    out[key] = Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : defaultSettings[key];
+  });
+  ["bodyWeight", "emphasisWeight", "headingWeight"].forEach(key => {
+    out[key] = Math.round(out[key] / 50) * 50;
+  });
+  const cols = Number(src.cols);
+  out.cols = [2,3,4].includes(cols) ? cols : defaultSettings.cols;
+  out.paper = src.paper === "letter" ? "letter" : "a4";
+  const bool = (value, fallback) => value === true || value === "true" || value === 1 ? true :
+    (value === false || value === "false" || value === 0 ? false : fallback);
+  out.rules = bool(src.rules, defaultSettings.rules);
+  out.justify = bool(src.justify, defaultSettings.justify);
+  out.hyphens = bool(src.hyphens, defaultSettings.hyphens);
+  out.topicFit = bool(src.topicFit, defaultSettings.topicFit);
+  out.pageno = bool(src.pageno, defaultSettings.pageno);
+  out.footer = typeof src.footer === "string" ? src.footer.slice(0, 300) : "";
+  out.fontFamily = ["serif","sans","georgia","jakarta"].includes(src.fontFamily) ? src.fontFamily : defaultSettings.fontFamily;
+  out.sheetBg = (typeof src.sheetBg === "string" && /^#[0-9a-f]{6}$/i.test(src.sheetBg.trim()))
+    ? src.sheetBg.trim().toLowerCase() : defaultSettings.sheetBg;
+  out.zoomMode = src.zoomMode === "manual" ? "manual" : "fit";
+  out.uiTheme = src.uiTheme === "dark" ? "dark" : "light";
+  out.density = String(out.lineHeight);
+  return out;
+}
+function trimNum(value, decimals = 2){
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  return n.toFixed(decimals).replace(/\.?0+$/, "");
+}
+function em(value){ return trimNum(value, 2) + "em"; }
+function signedEm(value, decimals = 2){
+  const n = Number(value) || 0;
+  return (n > 0 ? "+" : "") + trimNum(n, decimals) + "em";
+}
+function weightLabel(value){
+  const n = Math.round(Number(value) || 400);
+  if (n <= 425) return n + " Regular";
+  if (n <= 550) return n + " Medium";
+  if (n <= 650) return n + " Semi-bold";
+  return n + " Bold";
+}
+function setRangeFill(input){
+  if (!input) return;
+  const min = parseFloat(input.min || 0), max = parseFloat(input.max || 100), value = parseFloat(input.value || 0);
+  const pct = max === min ? 0 : ((value - min) / (max - min)) * 100;
+  input.style.setProperty("--fill", Math.max(0, Math.min(100, pct)) + "%");
+}
+function syncSegmented(id, value){
+  document.querySelectorAll("#" + id + " button").forEach(btn => {
+    btn.setAttribute("aria-pressed", String(btn.dataset.value) === String(value) ? "true" : "false");
+  });
+}
+function segmentedValue(id, fallback){
+  const active = document.querySelector("#" + id + " button[aria-pressed='true']");
+  return active ? active.dataset.value : fallback;
+}
+function markActivePreset(){
+  document.querySelectorAll(".preset-chip").forEach(chip => {
+    const preset = STYLE_PRESETS[chip.dataset.preset];
+    if (!preset) return;
+    const active = Object.entries(preset).every(([key, value]) => {
+      if (typeof value === "number") return Math.abs((+S[key] || 0) - value) < 0.001;
+      return S[key] === value;
+    });
+    chip.classList.toggle("active", active);
+    chip.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+function applySettingsToControls(){
+  syncSegmented("seg-cols", S.cols);
+  syncSegmented("seg-paper", S.paper);
+  syncSegmented("seg-fontfamily", S.fontFamily);
+  document.querySelectorAll("#sw-sheetbg .swatch[data-value]").forEach(btn => {
+    btn.setAttribute("aria-pressed", btn.dataset.value.toLowerCase() === S.sheetBg ? "true" : "false");
+  });
+  const bgCustom = $("#opt-sheetbg-custom");
+  if (bgCustom && document.activeElement !== bgCustom) bgCustom.value = S.sheetBg;
+  const bgOut = $("#val-sheetbg");
+  if (bgOut) bgOut.textContent = S.sheetBg.toUpperCase();
+
+  RANGE_FIELDS.forEach(([inputSel, key, outputSel, format]) => {
+    const input = $(inputSel), output = $(outputSel);
+    if (input) { input.value = S[key]; setRangeFill(input); }
+    if (output) output.textContent = format(S[key]);
+  });
+
+  const footer = $("#opt-footer");
+  if (footer && document.activeElement !== footer) footer.value = S.footer || "";
+  // If the user is typing the footer, do not move their cursor by rewriting it.
+  if (footer && document.activeElement === footer && footer.value !== (S.footer || "")) S.footer = footer.value;
+
+  $("#opt-rules").checked = !!S.rules;
+  $("#opt-justify").checked = !!S.justify;
+  syncSegmented("seg-hyphens", S.hyphens ? "hyphenated" : "whole");
+  const topicFitBox = $("#opt-topicfit");
+  if (topicFitBox) topicFitBox.checked = !!S.topicFit;
+  $("#opt-pageno").checked = !!S.pageno;
+
+  const paperName = S.paper === "letter" ? "US Letter" : "A4";
+  ["#help-paper", "#print-paper"].forEach(sel => { const el = $(sel); if (el) el.textContent = paperName; });
+
+  const themeBtn = $("#btn-theme");
+  if (themeBtn){
+    themeBtn.setAttribute("aria-pressed", String(S.uiTheme === "dark"));
+    themeBtn.title = S.uiTheme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+  }
+  markActivePreset();
+}
+
+function readControls(){
+  S.cols = +segmentedValue("seg-cols", S.cols);
+  S.paper = segmentedValue("seg-paper", S.paper);
+  S.fontFamily = segmentedValue("seg-fontfamily", S.fontFamily);
+  // sheetBg is written by its swatch/colour listeners; it already lives in S,
+  // so readControls must simply not clobber it.
+
+  RANGE_FIELDS.forEach(([inputSel, key]) => {
+    const input = $(inputSel);
+    if (input) S[key] = parseFloat(input.value);
+  });
+  S.density = String(S.lineHeight);
+
+  S.rules = $("#opt-rules").checked;
+  S.justify = $("#opt-justify").checked;
+  S.hyphens = (document.querySelector("#seg-hyphens button[aria-pressed='true']")?.dataset.value || "hyphenated") === "hyphenated";
+  S.topicFit = !!$("#opt-topicfit")?.checked;
+  S.pageno = $("#opt-pageno").checked;
+  S.footer = $("#opt-footer").value;
+  S = normalizeSettings(S);
+
+  persistSettings();
+  applySettingsToControls();
+  applyCSSVars();
+}
+
+function persistSettings(){
+  lsSet(LS_SETTINGS, JSON.stringify(S));
+}
+
+function setSettings(patch, render = true){
+  S = normalizeSettings({ ...S, ...(patch || {}) });
+  persistSettings();
+  applySettingsToControls();
+  applyCSSVars();
+  if (render) queueRender();
+}
+
+function calculateFitZoom(){
+  const pane = $("#preview-pane");
+  if (!pane || !pane.clientWidth) return Number.isFinite(+S.zoom) ? +S.zoom : 1;
+  const cs = getComputedStyle(pane);
+  const available = pane.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+  const pagePx = (S.paper === "letter" ? 215.9 : 210) * 96 / 25.4;
+  if (!available || !pagePx) return 1;
+  return Math.max(0.35, Math.min(1.3, Math.floor((available / pagePx) * 100) / 100));
+}
+function syncZoomControl(){
+  const input = $("#opt-zoom"), output = $("#val-zoom");
+  if (input && document.activeElement !== input){ input.value = S.zoom; setRangeFill(input); }
+  if (output) output.textContent = Math.round(S.zoom * 100) + "%";
+}
+
+function applyCSSVars(){
+  document.documentElement.dataset.theme = S.uiTheme === "dark" ? "dark" : "light";
+  if (S.zoomMode === "fit") S.zoom = calculateFitZoom();
+  const r = document.documentElement.style;
+  const dims = S.paper === "letter" ? [215.9, 279.4] : [210, 297];
+  r.setProperty("--page-w", dims[0] + "mm");
+  r.setProperty("--page-h", dims[1] + "mm");
+  r.setProperty("--margin-mm", S.margin);
+  r.setProperty("--gap-mm", S.columnGap);
+  r.setProperty("--body-pt", S.font);
+  r.setProperty("--leading", S.lineHeight);
+  r.setProperty("--word-spacing", S.wordSpacing + "em");
+  r.setProperty("--letter-spacing", S.letterSpacing + "em");
+  r.setProperty("--paragraph-gap", S.paragraphSpacing + "em");
+  r.setProperty("--list-gap", S.listGap + "em");
+  r.setProperty("--list-indent", S.listIndent + "em");
+  r.setProperty("--heading-before", S.headingBefore + "em");
+  r.setProperty("--heading-after", S.headingAfter + "em");
+  r.setProperty("--first-line-indent", S.firstLineIndent + "em");
+  r.setProperty("--math-gap", S.mathSpacing + "em");
+  r.setProperty("--table-pad-y", S.tablePadding + "em");
+  r.setProperty("--table-pad-x", (Number(S.tablePadding) + 0.12) + "em");
+  r.setProperty("--body-weight", S.bodyWeight);
+  r.setProperty("--emphasis-weight", S.emphasisWeight);
+  r.setProperty("--heading-weight", S.headingWeight);
+  r.setProperty("--sheet-bg", S.sheetBg);
+  r.setProperty("--sentence-gap", S.sentenceSpacing + "em");
+  const SHEET_FONTS = {
+    serif: '"Liberation Serif","Times New Roman",Times,serif',
+    sans: '"Liberation Sans",Arial,"Helvetica Neue",sans-serif',
+    georgia: 'Georgia,"Times New Roman",Times,serif',
+    jakarta: '"Plus Jakarta Sans","Liberation Sans",Arial,sans-serif'
+  };
+  r.setProperty("--sheet-font", SHEET_FONTS[S.fontFamily] || SHEET_FONTS.serif);
+
+  pagesEl.style.zoom = S.zoom;
+  r.setProperty("--preview-zoom", S.zoom);
+  syncZoomControl();
+
+  const st = document.getElementById("pagesize-style") || document.createElement("style");
+  st.id = "pagesize-style";
+  st.textContent = "@page{size:" + (S.paper === "letter" ? "letter" : "A4") + ";margin:0}";
+  document.head.appendChild(st);
+}
+
+/* ---------------- Markdown + math pipeline ---------------- */
+const TOKEN = i => "\uE000" + i + "\uE001";
+function escapeHtml(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+function renderMarkdown(md, errors = []){
+  if (dependencyError) throw new Error(dependencyError);
+  const store = [];   // {kind:'code'|'math', display, text, lang}
+  const keep = item => { store.push(item); return TOKEN(store.length-1); };
+
+  // 1) fenced code blocks first (so math inside code stays literal)
+  md = md.replace(/```([^\n`]*)\n([\s\S]*?)(?:```|(?=$))/g, (m, lang, code) => "\n\n" + keep({kind:"code", lang:lang.trim(), text:code.replace(/\n$/,"")}) + "\n\n");
+  // 2) inline code `…` BEFORE math, so `$` inside code spans stays literal
+  md = md.replace(/`([^`\n]+)`/g, (m, t) => keep({kind:"icode", text:t}));
+  // 2b) embedded-image tags → data URIs (after code protection so tags inside
+  //     fenced/inline code stay literal; before math so nothing else shifts)
+  md = resolveImageRefs(md, errors);
+  // 3) display math: $$…$$, \[…\], \begin{env}…\end{env}
+  md = md.replace(/\$\$([\s\S]+?)\$\$/g, (m, t) => keep({kind:"math", display:true, text:t.trim()}));
+  md = md.replace(/\\\[([\s\S]+?)\\\]/g, (m, t) => keep({kind:"math", display:true, text:t.trim()}));
+  md = md.replace(/\\begin\{([a-zA-Z*]+)\}[\s\S]+?\\end\{\1\}/g, (m) => keep({kind:"math", display:true, text:m.trim()}));
+  // 4) inline math: \(…\) then $…$ (single-line, not currency-like: no space right after $ or before closing $)
+  md = md.replace(/\\\((.+?)\\\)/g, (m, t) => keep({kind:"math", display:false, text:t.trim()}));
+  md = md.replace(/(?<![\\$\w])\$(?!\s)((?:\\.|[^$\\\n])+?)(?<!\s)\$(?!\w)/g, (m, t) => keep({kind:"math", display:false, text:t.trim()}));
+  // 5) explicit breaks
+  md = md.replace(/<!--\s*column-break\s*-->/gi, '\n\n<div data-break="column"></div>\n\n')
+         .replace(/<!--\s*page-break\s*-->/gi,   '\n\n<div data-break="page"></div>\n\n')
+         .replace(/<!--\s*keep-topic\s*-->/gi,   '\n\n<div data-break="topic"></div>\n\n');
+
+  let html = marked.parse(md);
+  html = DOMPurify.sanitize(html, {
+    ADD_TAGS:["figure","figcaption","caption","svg","path","line","rect","circle","text","g","defs","marker","polygon","polyline","ellipse","use","title","desc"],
+    ADD_ATTR:["target","data-break","viewBox","d","x","y","x1","y1","x2","y2","cx","cy","r","rx","ry","width","height","fill","stroke","stroke-width","points","transform","text-anchor","font-size","marker-end","marker-start","id","markerWidth","markerHeight","refX","refY","orient"],
+    ALLOW_DATA_ATTR:false
+  });
+
+  // 6) restore protected chunks; render math with KaTeX
+  html = html.replace(/\uE000(\d+)\uE001/g, (m, idx) => {
+    const it = store[+idx]; if(!it) return m;
+    if(it.kind === "code")  return "<pre><code>" + escapeHtml(it.text) + "</code></pre>";
+    if(it.kind === "icode") return "<code>" + escapeHtml(it.text) + "</code>";
+    try {
+      const out = katex.renderToString(it.text, { displayMode: !!it.display, throwOnError:true, strict:false, trust:false, output:"htmlAndMathml" });
+      return it.display ? '<div class="math-display">' + out + "</div>" : out;
+    } catch(e){
+      errors.push((it.display ? "$$" : "$") + it.text.slice(0,160) + "  →  " + e.message);
+      return '<span class="math-error" title="KaTeX error">' + escapeHtml((it.display?"$$":"$") + it.text + (it.display?"$$":"$")) + "</span>";
+    }
+  });
+  // a display-math token standing alone became <p>…</p> — unwrap it
+  html = html.replace(/<p>(<div class="math-display">[\s\S]*?<\/div>)<\/p>/g, "$1");
+
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  postProcess(tmp);
+  return tmp;
+}
+
+/* Extra space after sentence-ending punctuation ("double spacing", tunable).
+   Wraps the sentence-final word+punctuation in .sent-end (margin-right comes
+   from --sentence-gap). Only matches inside a single text node, requires the
+   next sentence to start with a capital/digit/quote, and never touches
+   code, pre or KaTeX. At the default 0 the rendered sheet is the untouched
+   GPAI original. Text content is unchanged, so the exported PDF's text
+   (and word counts) stay exact. */
+function applySentenceSpacing(root){
+  if (!(S.sentenceSpacing > 0)) return;
+  const re = /(\S*?[.!?]+["'”’)\]]*)(\s+)(?=[A-Z0-9"“‘'(])/;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node){
+      if (!node.nodeValue || !/[.!?]/.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+      const p = node.parentElement;
+      if (!p || p.closest("code,pre,.katex,.math-error,script,style")) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  const nodes = [];
+  let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+  const globalRe = new RegExp(re.source, "g");
+  nodes.forEach(node => {
+    const text = node.nodeValue;
+    if (!re.test(text)) return;
+    const frag = document.createDocumentFragment();
+    let last = 0, m;
+    globalRe.lastIndex = 0;
+    while ((m = globalRe.exec(text))){
+      const wordEnd = m.index + m[1].length;
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const span = document.createElement("span");
+      span.className = "sent-end";
+      span.textContent = m[1];
+      frag.appendChild(span);
+      last = wordEnd; // the original whitespace stays as plain text in the next slice
+    }
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    node.replaceWith(frag);
+  });
+}
+function postProcess(root){
+  // links: new tab on screen; still clickable in PDF (same-page anchors stay same-tab)
+  root.querySelectorAll("a[href]").forEach(a => {
+    const href = a.getAttribute("href") || "";
+    if (href.startsWith("#")) { a.removeAttribute("target"); a.removeAttribute("rel"); }
+    else { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+  });
+  // SVG <use> may reference local defs/markers only; never fetch an external document.
+  root.querySelectorAll("use").forEach(u => {
+    ["href", "xlink:href"].forEach(attr => {
+      const value = u.getAttribute(attr);
+      if (value && !value.startsWith("#")) u.removeAttribute(attr);
+    });
+    const xlink = u.getAttributeNS && u.getAttributeNS("http://www.w3.org/1999/xlink", "href");
+    if (xlink && !xlink.startsWith("#")) u.removeAttributeNS("http://www.w3.org/1999/xlink", "href");
+  });
+  // images → figure (+ caption from title if present, else no forced caption)
+  root.querySelectorAll("img").forEach(img => {
+    img.loading = "eager"; img.decoding = "sync";
+    // No load listener here: imagesReady() already waits for load before
+    // pagination. Listening unconditionally made every render queue another
+    // render (new <img> → load → render → …) for any document with an image.
+    // an image that is the sole content of a <p> becomes a top-level <figure>
+    const par = img.parentElement;
+    if (par && par.tagName === "P" && par.childElementCount === 1 && !par.textContent.trim()){
+      const fig = document.createElement("figure");
+      par.replaceWith(fig); fig.appendChild(img);
+      const cap = img.getAttribute("title");
+      if (cap) { const fc = document.createElement("figcaption"); fc.textContent = cap; fig.appendChild(fc); }
+    } else if (par && par.tagName !== "FIGURE") {
+      const fig = document.createElement("figure");
+      img.replaceWith(fig); fig.appendChild(img);
+      const cap = img.getAttribute("title");
+      if (cap) { const fc = document.createElement("figcaption"); fc.textContent = cap; fig.appendChild(fc); }
+    }
+  });
+  // a lone <svg> inside a <p> becomes a figure (atomic for the paginator)
+  root.querySelectorAll("p > svg").forEach(svg => {
+    const p = svg.parentElement;
+    // Ignore text inside the SVG itself (labels); only reject real prose around it.
+    const onlySvg = p && [...p.childNodes].every(n => n === svg || (n.nodeType === 3 && !n.textContent.trim()));
+    if (p && p.childElementCount === 1 && onlySvg){
+      const fig = document.createElement("figure"); p.replaceWith(fig); fig.appendChild(svg);
+    }
+  });
+  // tables → wrapper (lets the paginator split by rows)
+  root.querySelectorAll("table").forEach(t => {
+    if (t.parentElement && t.parentElement.classList.contains("table-wrap")) return;
+    const w = document.createElement("div"); w.className = "table-wrap";
+    t.replaceWith(w); w.appendChild(t);
+  });
+  // heading semantics: first H1 = document title; later H1s look like sections.
+  // A lone short paragraph immediately before the first H1 becomes the kicker line ("G11, Phy, U4:").
+  const h1s = root.querySelectorAll("h1");
+  h1s.forEach((h, i) => { if (i > 0) h.classList.add("sectionlike"); });
+  if (h1s.length){
+    let prev = h1s[0].previousElementSibling;
+    if (prev && prev.tagName === "P" && prev.textContent.trim().length <= 60) prev.classList.add("doc-kicker-line"), prev.style.marginBottom = ".1em";
+  }
+  applySentenceSpacing(root);
+}
+
+/* ---------------- pagination: blocks → columns → pages ---------------- */
+function newPage(pagesRoot, pageNo){
+  const page = document.createElement("section");
+  page.className = "page";
+  const cols = [];
+  for (let i = 0; i < S.cols; i++){
+    const c = document.createElement("div");
+    c.className = "col sheet" + (S.rules ? " rules" : "") + (S.justify ? "" : " no-justify") + (S.hyphens ? "" : " no-hyphens");
+    page.appendChild(c); cols.push(c);
+  }
+  if (S.footer || S.pageno){
+    const f = document.createElement("div"); f.className = "pagefoot";
+    f.innerHTML = "<span>" + escapeHtml(S.footer || "") + "</span><span>" + (S.pageno ? pageNo : "") + "</span>";
+    page.appendChild(f);
+  }
+  pagesRoot.appendChild(page);
+  return cols;
+}
+/* NOTE: scrollHeight of a fixed-height column is always >= clientHeight,
+   so measure the real content bottom (last flow child's rect) instead. */
+function contentHeight(col){
+  const last = col.lastElementChild;
+  if (!last) return 0;
+  const mb = parseFloat(getComputedStyle(last).marginBottom) || 0;
+  return last.getBoundingClientRect().bottom - col.getBoundingClientRect().top + mb;
+}
+const overflows = col => contentHeight(col) > col.clientHeight + 1;
+
+/* Group sections (h2/h3/sectionlike-h1 + everything until the next such
+   heading) into .topic-group wrappers. `auto` groups every topic; otherwise
+   only topics tagged with a preceding <!-- keep-topic --> line (a tag with no
+   heading after it groups the next single block). Break directives close the
+   current group and pass through untouched. */
+function groupTopics(blocks, auto){
+  const isStarter = n => n.tagName === "H2" || n.tagName === "H3" || (n.tagName === "H1" && n.classList.contains("sectionlike"));
+  const out = [];
+  let cur = null, keep = false;
+  const close = () => { if (cur){ out.push(cur); cur = null; } };
+  const open = marked => { cur = document.createElement("div"); cur.className = "topic-group"; if (marked) cur.dataset.keep = "1"; };
+  for (const n of blocks){
+    if (n.dataset && n.dataset.break === "topic"){ keep = true; continue; }
+    if (n.dataset && (n.dataset.break === "column" || n.dataset.break === "page")){ close(); out.push(n); continue; }
+    if (isStarter(n) && (auto || keep)){ close(); open(keep); keep = false; cur.appendChild(n); }
+    else if (cur){ cur.appendChild(n); }
+    else if (keep){ open(true); keep = false; cur.appendChild(n); close(); }
+    else out.push(n);
+  }
+  close();
+  return out;
+}
+
+function paginate(contentRoot){
+  // Measure at true print scale. Chromium's rect geometry under CSS `zoom`
+  // is not a reliable basis for pagination; restoring the preview zoom at
+  // the end keeps the visible page breaks identical to the exported PDF.
+  const previewZoom = S.zoom;
+  pagesEl.style.zoom = 1;
+  pagesEl.innerHTML = "";
+  let pageNo = 1;
+  let cols = newPage(pagesEl, pageNo), ci = 0;
+  const col = () => cols[ci];
+  const advance = (forcePage) => {
+    if (forcePage || ci >= cols.length - 1){ pageNo++; cols = newPage(pagesEl, pageNo); ci = 0; }
+    else ci++;
+  };
+  const blocks = [...contentRoot.childNodes].filter(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim()));
+  // normalise stray text nodes into <p>
+  let norm = blocks.map(n => {
+    if (n.nodeType === 3){ const p = document.createElement("p"); p.textContent = n.textContent.trim(); return p; }
+    return n;
+  });
+  // "Keep topics intact" mode (or explicit <!-- keep-topic --> tags): wrap each
+  // section in a .topic-group so the packer can move it to a fresh column
+  // whole, instead of letting it start at the foot of the current one.
+  if (S.topicFit || norm.some(n => n.nodeType === 1 && n.dataset && n.dataset.break === "topic")){
+    norm = groupTopics(norm, S.topicFit);
+  }
+
+  let placedBlocks = 0;
+  for (let bi = 0; bi < norm.length; bi++){
+    let node = norm[bi];
+    // A break before any content must not manufacture a blank first column/page.
+    // Later consecutive breaks are left alone (an intentional blank column/page).
+    if (node.dataset && node.dataset.break === "column"){ if (placedBlocks) advance(false); continue; }
+    if (node.dataset && node.dataset.break === "page"){ if (placedBlocks) advance(true); continue; }
+    // keep headings with (at least the start of) what follows
+    place(node, norm[bi+1]);
+    placedBlocks++;
+  }
+  // drop a trailing empty page if breaks created one
+  const allPages = [...pagesEl.querySelectorAll(".page")];
+  const last = allPages[allPages.length-1];
+  if (allPages.length > 1 && last && ![...last.querySelectorAll(".col")].some(c => c.childNodes.length)) last.remove();
+  fitWideMath();
+  pagesEl.style.zoom = previewZoom;
+  updateStats();
+
+  /* A topic enters the current column only when it fits the remaining space
+     completely; otherwise it moves — whole — to the top of the next column.
+     Topics taller than a full column split as usual (block by block). */
+  function placeTopic(node){
+    col().appendChild(node);
+    if (!overflows(col())) return;
+    col().removeChild(node);
+    if (col().childNodes.length) advance(false);
+    col().appendChild(node);
+    if (!overflows(col())) return;
+    col().removeChild(node);
+    splitPlace(node, true);
+  }
+
+  function place(node, nextNode){
+    if (node.classList && node.classList.contains("topic-group")){ placeTopic(node); return; }
+    // heading keep-with-next: need heading + a little of next block in same column
+    if (/^H[1-4]$/.test(node.tagName) && nextNode){
+      col().appendChild(node);
+      const need = 26; // px of following content
+      if (contentHeight(col()) > col().clientHeight - need && col().childNodes.length > 1){
+        col().removeChild(node); advance(false); col().appendChild(node);
+      }
+      if (overflows(col()) && col().childNodes.length > 1){ col().removeChild(node); advance(false); col().appendChild(node); }
+      return;
+    }
+    col().appendChild(node);
+    if (!overflows(col())) return;
+    // doesn't fit here…
+    if (col().childNodes.length === 1){
+      // alone in a fresh column but still too tall → must split it in place
+      col().removeChild(node);
+      splitPlace(node, /*freshColumn=*/true);
+      return;
+    }
+    col().removeChild(node);
+    // try to fill the remaining space with the head of a splittable block
+    if (isSplittable(node) && splitPlace(node, false)) return;
+    advance(false);
+    col().appendChild(node);
+    if (overflows(col())){ col().removeChild(node); splitPlace(node, true); }
+  }
+
+  function isSplittable(node){
+    return ["UL","OL","P","BLOCKQUOTE","PRE"].includes(node.tagName)
+        || (node.classList && node.classList.contains("table-wrap"));
+  }
+
+  /* Split `node` across the current column (remainder) and following
+     columns. Returns true if any part was placed. */
+  function splitPlace(node, freshColumn){
+    const parts = splitUnits(node);       // {shellProto, units:[Node...]} or null
+    if (!parts){
+      // Atomic block. In a fresh column we have no choice but to place it
+      // (flagged). In a partly-filled column, decline so the caller moves
+      // it to the next column instead of clipping it here.
+      if (!freshColumn) return false;
+      col().appendChild(node); node.classList.add("overflow-note");
+      renderErrors.push("Oversized block placed without splitting: <" + node.tagName.toLowerCase() + "> " + node.textContent.trim().slice(0,80) + "…");
+      return true;
+    }
+    let { shellProto, units } = parts;
+    let placedAny = false, guard = 0, unitIndex = 0; // index, not shift(): O(n) on huge blocks
+    const decorateShell = shell => {
+      if (!placedAny && parts.decorateFirstShell) parts.decorateFirstShell(shell);
+    };
+    while (unitIndex < units.length && guard++ < 5000){
+      const shell = shellProto.cloneNode(false);
+      decorateShell(shell);
+      if (placedAny) shell.classList.add("split-continuation");
+      // for <ol> continuations keep numbering
+      if (shell.tagName === "OL" && placedAny) shell.start = (shellProto._nextStart || 1);
+      col().appendChild(shell);
+      let took = 0;
+      // Batch-append with binary refinement: overflow is monotonic as units
+      // are added, so this finds the identical fill point as one-by-one
+      // appending but with O(log n) forced layouts instead of one per word.
+      let batch = (shell.tagName === "P" || shell.tagName === "PRE" || shell.tagName === "BLOCKQUOTE") ? 32 : 8;
+      while (unitIndex < units.length){
+        const n = Math.min(batch, units.length - unitIndex);
+        for (let j = 0; j < n; j++) shellAppend(shell, units[unitIndex + j]);
+        if (!overflows(col())){
+          unitIndex += n; took += n; placedAny = true;
+          batch = Math.min(batch * 2, 256);
+          continue;
+        }
+        for (let j = n - 1; j >= 0; j--) shellRemove(shell, units[unitIndex + j]);
+        if (n === 1) break;
+        batch = Math.max(1, Math.floor(n / 2));
+      }
+      if (shell.tagName === "OL") shellProto._nextStart = (shell.start || 1) + took;
+      if (!took){
+        col().removeChild(shell);
+        if (!freshColumn && col().childNodes.length){ advance(false); freshColumn = true; continue; }
+        // single unit taller than a whole column: force-place it (flagged)
+        const sh2 = shellProto.cloneNode(false);
+        decorateShell(sh2);
+        if (placedAny) sh2.classList.add("split-continuation");
+        shellAppend(sh2, units[unitIndex++]);
+        sh2.classList.add("overflow-note"); col().appendChild(sh2); placedAny = true;
+        renderErrors.push("Very long item could not be split further (may overflow its column). Shorten the bullet/paragraph or add a manual break.");
+        if (unitIndex < units.length) advance(false);
+      } else if (unitIndex < units.length){
+        shell.classList.add("split-head");
+        advance(false); freshColumn = true;
+      }
+      if (shell.parentNode && !shellChildCount(shell)) shell.remove();
+    }
+    if (unitIndex < units.length) {
+      renderErrors.push("A very large block could not be paginated completely; split it into smaller sections.");
+    }
+    return placedAny;
+  }
+
+  function shellAppend(shell, unit){
+    if (shell.classList && shell.classList.contains("table-wrap")) shell.querySelector("tbody").appendChild(unit);
+    else shell.appendChild(unit);
+  }
+  function shellRemove(shell, unit){ if (unit.parentNode) unit.parentNode.removeChild(unit); }
+  function shellChildCount(shell){
+    if (shell.classList && shell.classList.contains("table-wrap")) return shell.querySelectorAll("tbody tr").length;
+    return shell.childNodes.length;
+  }
+
+  function splitUnits(node){
+    if (node.classList && node.classList.contains("topic-group")){
+      // split a too-tall topic at section-block granularity
+      const units = [...node.children];
+      return units.length > 1 ? { shellProto: node.cloneNode(false), units } : null;
+    }
+    if (node.tagName === "UL" || node.tagName === "OL"){
+      const shell = node.cloneNode(false);
+      const units = [...node.children].map(li => li.cloneNode(true));
+      return units.length ? { shellProto: shell, units } : null;
+    }
+    if (node.classList && node.classList.contains("table-wrap")){
+      const tbl = node.querySelector("table"); if (!tbl) return null;
+      // Include footer rows: dropping <tfoot> would silently lose content when a table splits.
+      const rows = [...tbl.querySelectorAll("tbody tr, tfoot tr")];
+      if (!rows.length) return null; // atomic path: never let an unsplittable table vanish
+      const caption = tbl.querySelector(":scope > caption");
+      return {
+        shellProto: makeTableShell(tbl),
+        units: rows.map(r => r.cloneNode(true)),
+        table:true,
+        decorateFirstShell: caption ? shell => {
+          const t = shell.querySelector("table");
+          if (t && !t.querySelector(":scope > caption")) t.insertBefore(caption.cloneNode(true), t.firstChild);
+        } : null
+      };
+    }
+    if (node.tagName === "P" || node.tagName === "BLOCKQUOTE" || node.tagName === "PRE" || node.tagName === "FIGURE"){
+      const shell = node.cloneNode(false);
+      // units = child nodes; text nodes expanded word-by-word; <pre> by lines.
+      // A single oversized token (long URL, minified code, huge hash) has no
+      // whitespace split point, so chunk it by characters — otherwise it is one
+      // unsplittable unit that overflows and gets clipped by overflow:hidden.
+      let units = [];
+      const CHUNK = 120;
+      const pushText = txt => {
+        if (!txt) return;
+        if (txt.length > CHUNK){
+          for (let i = 0; i < txt.length; i += CHUNK) units.push(document.createTextNode(txt.slice(i, i + CHUNK)));
+        } else units.push(document.createTextNode(txt));
+      };
+      if (node.tagName === "PRE"){
+        node.textContent.split("\n").forEach(line => pushText(line + "\n"));
+      } else {
+        [...node.childNodes].forEach(ch => {
+          if (ch.nodeType === 3) ch.textContent.split(/(?<=\s)/).forEach(pushText);
+          else units.push(ch.cloneNode(true));
+        });
+      }
+      if (units.length < 2) return null;
+      return { shellProto: shell, units };
+    }
+    return null;
+  }
+  function makeTableShell(tbl){
+    const shellTbl = tbl.cloneNode(false);
+    const cg = tbl.querySelector("colgroup"), th = tbl.querySelector("thead");
+    if (cg) shellTbl.appendChild(cg.cloneNode(true));
+    if (th) shellTbl.appendChild(th.cloneNode(true));
+    shellTbl.appendChild(document.createElement("tbody"));
+    const wrap = document.createElement("div"); wrap.className = "table-wrap"; wrap.appendChild(shellTbl);
+    // make cloneNode(false) on the wrapper produce a fresh full shell:
+    wrap.cloneNode = () => { const w = document.createElement("div"); w.className = "table-wrap"; w.appendChild(shellTbl.cloneNode(true)); return w; };
+    return wrap;
+  }
+}
+
+/* shrink any display equation / table wider than its column */
+function fitWideMath(){
+  document.querySelectorAll(".col .math-display").forEach(d => {
+    d.style.fontSize = "";
+    let guard = 0;
+    while (d.scrollWidth > d.clientWidth + 1 && guard++ < 12){
+      const cur = parseFloat(getComputedStyle(d).fontSize);
+      d.style.fontSize = (cur * 0.92) + "px";
+    }
+  });
+  // Inline formulas need the same horizontal protection; otherwise one long
+  // fraction can be clipped by the fixed-width, overflow-hidden column.
+  document.querySelectorAll(".col .katex").forEach(k => {
+    if (k.closest(".math-display")) return;
+    k.style.fontSize = "";
+    const col = k.closest(".col");
+    if (!col) return;
+    let guard = 0;
+    while (k.getBoundingClientRect().width > col.clientWidth + 1 && guard++ < 16){
+      const cur = parseFloat(getComputedStyle(k).fontSize);
+      if (!Number.isFinite(cur) || cur <= 1) break;
+      k.style.fontSize = (cur * 0.92) + "px";
+    }
+  });
+  document.querySelectorAll(".col table").forEach(t => {
+    t.style.fontSize = "";
+    let guard = 0;
+    while (t.scrollWidth > t.clientWidth + 1 && guard++ < 8){
+      const cur = parseFloat(getComputedStyle(t).fontSize);
+      t.style.fontSize = (cur * 0.93) + "px";
+    }
+  });
+}
+
+/* ---------------- stats / errors ---------------- */
+function updateStats(){
+  const text = editor.value;
+  const words = (text.match(/\S+/g) || []).length;
+  const formulas = document.querySelectorAll("#pages .katex").length;
+  const pgs = document.querySelectorAll("#pages .page").length;
+  $("#stats").innerHTML = "<b>" + words.toLocaleString() + "</b> words · <b>" + formulas + "</b> formulas · <b>" + pgs + "</b> page" + (pgs===1?"":"s");
+  const pageInfoEl = $("#pageinfo");
+  if (pageInfoEl) pageInfoEl.textContent = pgs + " page" + (pgs===1?"":"s") + " · " + S.cols + " columns · " + (S.paper==="letter"?"US Letter":"A4");
+  const lines = text ? text.split("\n").length : 0;
+  const meta = $("#editor-meta");
+  if (meta) meta.textContent = lines.toLocaleString() + " line" + (lines===1?"":"s");
+  const badge = $("#errbadge");
+  if (renderErrors.length){ badge.style.display = "inline-block"; badge.textContent = "⚠ " + renderErrors.length + " rendering problem" + (renderErrors.length===1?"":"s"); }
+  else badge.style.display = "none";
+  syncHeaderHeight();
+}
+$("#errbadge").addEventListener("click", () => {
+  $("#errlist").innerHTML = renderErrors.map(e => "<li>" + escapeHtml(e) + "</li>").join("");
+  $("#errors").showModal();
+});
+$("#btn-close-errors").addEventListener("click", () => $("#errors").close());
+
+/* ---------------- render driver ---------------- */
+let debounce = null;
+/* Wait for images to decode BEFORE paginating — otherwise a not-yet-loaded
+   image measures as 0px tall, gets placed at a column bottom, and is then
+   clipped when its real height arrives. (Classic paste-to-print bug.) */
+async function imagesReady(root, errors, isCurrent){
+  const imgs = [...root.querySelectorAll("img")];
+  const stillCurrent = () => !isCurrent || isCurrent();
+  await Promise.all(imgs.map(async img => {
+    if (img.complete && img.naturalWidth) return;
+    const ev = new Promise(r => { img.addEventListener("load", r, {once:true}); img.addEventListener("error", r, {once:true}); });
+    const dec = (img.decode ? img.decode().catch(() => {}) : Promise.resolve());
+    const finished = await Promise.race([
+      Promise.all([ev, dec]).then(() => true),
+      new Promise(r => setTimeout(() => r(false), 2500))
+    ]);
+    if (!stillCurrent()) return;
+    if (!finished){
+      // We paginate provisionally now; refresh exactly once when this slow
+      // image actually arrives (normal-speed images never take this path).
+      if (img.complete && img.naturalWidth) queueRepaginate();
+      else if (!img.complete) img.addEventListener("load", () => { if (stillCurrent()) queueRepaginate(); }, { once:true });
+    }
+    if (!img.naturalWidth){
+      const src = (img.getAttribute("src") || "").slice(0, 90);
+      errors.push((finished || img.complete)
+        ? "Image failed to load (check the URL or re-paste it): " + src
+        : "Image is still loading; the preview will refresh when it arrives: " + src);
+    }
+  }));
+}
+let renderSequence = 0;
+async function renderNow(){
+  const mySequence = ++renderSequence;
+  await IMG_READY;   // embedded-image tags resolve against the loaded browser store
+  if (mySequence !== renderSequence) return false;
+  const myErrors = [];
+  const root = renderMarkdown(editor.value || "", myErrors);
+  await imagesReady(root, myErrors, () => mySequence === renderSequence);
+  if (mySequence !== renderSequence) return false; // a newer edit superseded this render
+  renderErrors = myErrors;
+  try {
+    paginate(root);
+  } finally {
+    pagesEl.style.zoom = S.zoom; // paginate measures at zoom 1; always restore, even on error
+  }
+  return true;
+}
+function showFatalError(error){
+  const message = error && error.message ? error.message : String(error || "Unknown render error");
+  renderErrors = [message];
+  pagesEl.style.zoom = 1;
+  pagesEl.innerHTML = '<div class="fatal-error" role="alert"><strong>The preview could not be rendered.</strong>' +
+    escapeHtml(message) + '<br>Your editor content is untouched. Fix the problem above, then edit or reload to render again.</div>';
+  try { updateStats(); } catch(_){}
+}
+function reportRenderError(error){
+  console.error(error);
+  showFatalError(error);
+  try { toast("Render error: " + (error && error.message ? error.message : error)); } catch(_){}
+}
+function queueRender(){
+  clearTimeout(debounce);
+  debounce = setTimeout(async () => {
+    debounce = null;
+    try { await renderNow(); } catch(e) { reportRenderError(e); }
+  }, 220);
+}
+async function flushRender(){
+  if (debounce){ clearTimeout(debounce); debounce = null; }
+  await renderNow();
+}
+function queueRepaginate(){
+  if (repaginateQueued) return; repaginateQueued = true;
+  setTimeout(() => { repaginateQueued = false; queueRender(); }, 60);
+}
+editor.addEventListener("input", () => { saveContent(); histNoteInput(); queueRender(); });
+document.getElementById("controls").addEventListener("input", e => {
+  if (e.target && e.target.id === "opt-zoom") S.zoomMode = "manual";
+  readControls(); queueRender();
+});
+document.getElementById("controls").addEventListener("change", () => { readControls(); queueRender(); });
+window.addEventListener("resize", () => { syncHeaderHeight(); applyCSSVars(); queueRepaginate(); });
+
+/* ---------------- design panel interactions ---------------- */
+function syncHeaderHeight(){
+  const header = $(".app-header");
+  if (header) document.documentElement.style.setProperty("--header-h", header.offsetHeight + "px");
+}
+function setDesignOpen(open, persist = true){
+  document.body.classList.toggle("design-closed", !open);
+  const btn = $("#btn-design");
+  if (btn) btn.setAttribute("aria-expanded", String(open));
+  const panel = $("#controls");
+  if (panel) panel.inert = !open;
+  if (persist) {
+    lsSet("cheatsheet-studio.design", open ? "open" : "closed");
+  }
+  requestAnimationFrame(() => { syncHeaderHeight(); applyCSSVars(); queueRepaginate(); });
+}
+$("#btn-design").addEventListener("click", () => {
+  setDesignOpen(document.body.classList.contains("design-closed"));
+});
+const closeDesignBtn = $("#btn-close-design");
+if (closeDesignBtn) closeDesignBtn.addEventListener("click", () => setDesignOpen(false));
+syncHeaderHeight();
+try {
+  const designPref = lsGet("cheatsheet-studio.design");
+  if (designPref === "closed" || (designPref === null && window.matchMedia("(max-width: 1180px)").matches)) {
+    setDesignOpen(false, false);
+  } else if (designPref === "open") {
+    setDesignOpen(true, false);
+  }
+} catch(e) {}
+
+document.querySelectorAll(".segmented").forEach(group => {
+  group.addEventListener("click", e => {
+    const btn = e.target.closest("button[data-value]");
+    if (!btn) return;
+    group.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+    readControls(); queueRender();
+  });
+});
+
+document.querySelectorAll("#sw-sheetbg .swatch[data-value]").forEach(btn => {
+  btn.addEventListener("click", () => setSettings({ sheetBg: btn.dataset.value }, false));
+});
+const sheetBgCustom = $("#opt-sheetbg-custom");
+if (sheetBgCustom) sheetBgCustom.addEventListener("input", () => setSettings({ sheetBg: sheetBgCustom.value }, false));
+
+document.querySelectorAll(".preset-chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    const preset = STYLE_PRESETS[chip.dataset.preset];
+    if (!preset) return;
+    setSettings({ ...preset });
+    toast(chip.textContent.trim() + " preset applied");
+  });
+});
+
+$("#btn-reset-style").addEventListener("click", () => {
+  if (!confirm("Reset all design settings to the GPAI defaults? Your content and footer text will be kept.")) return;
+  setSettings({ ...defaultSettings, footer: S.footer, zoom: S.zoom, zoomMode: S.zoomMode, uiTheme: S.uiTheme });
+  toast("Design reset to GPAI defaults");
+});
+
+$("#btn-fit").addEventListener("click", () => {
+  setSettings({ zoomMode:"fit", zoom: calculateFitZoom() }, false);
+});
+$("#btn-zoom-100").addEventListener("click", () => setSettings({ zoomMode:"manual", zoom: 1 }, false));
+
+// Floating help/print panels close on outside click or Escape, like menus should.
+document.addEventListener("click", e => {
+  document.querySelectorAll(".help-menu[open], .print-check[open]").forEach(panel => {
+    if (!panel.contains(e.target)) panel.open = false;
+  });
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  document.querySelectorAll(".help-menu[open], .print-check[open]").forEach(panel => { panel.open = false; });
+});
+
+/* ---------------- insert helpers ---------------- */
+function insertAtCursor(text){
+  commitPendingEdit();              // the typing before this insertion is its own undo step
+  const prev = editor.value;
+  const s = editor.selectionStart ?? editor.value.length, e = editor.selectionEnd ?? s;
+  editor.setRangeText(text, s, e, "end");
+  editor.focus();
+  if (editor.value !== prev) doPush(prev);   // insertion = one undo step
+  committedBase = editor.value;
+  saveContent(); queueRender(); updateHistUI();
+}
+function fileToDataURL(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("Could not read that file."));
+    reader.onabort = () => reject(new Error("Reading that file was cancelled."));
+    try { reader.readAsDataURL(file); } catch(e) { reject(e); }
+  });
+}
+async function handleImageFile(file){
+  if (!file) return;
+  if (!file.type || !file.type.startsWith("image/")){ toast("That file is not an image."); return; }
+  try {
+    const url = await fileToDataURL(file);
+    if (typeof url !== "string" || !url.startsWith("data:")) throw new Error("The browser did not return image data.");
+    const alt = (file.name || "image").replace(/\.[^.]+$/,"").replace(/[\[\]]/g,"");
+    await IMG_READY;
+    const id = makeImgId();
+    const stored = await imgPut(id, url);
+    if (stored){
+      // The editor shows a short tag instead of megabytes of base64.
+      insertAtCursor("\n\n![" + alt + "](gnote-img:" + id + ")\n\n");
+      toast("Image stored — a short tag stands for it in the editor");
+    } else {
+      insertAtCursor("\n\n![" + alt + "](" + url + ")\n\n");   // storage unavailable: old inline behaviour
+      toast("Image embedded");
+    }
+  } catch(e) {
+    console.error(e);
+    toast("Could not embed that image: " + (e.message || e));
+  }
+}
+function isTextLikeFile(file){
+  if (!file) return false;
+  return (file.type && file.type.startsWith("text/")) || /\.(md|markdown|txt|text)$/i.test(file.name || "");
+}
+async function handleMdFile(file){
+  if (!file) return;
+  if (!isTextLikeFile(file)){
+    toast("Unsupported file: import a .md, .markdown or .txt file, or an image.");
+    return;
+  }
+    try {
+      const text = await extractInlineImages(await file.text()); // imported base64 → stored tags
+      if (editor.value.trim() && !confirm("Replace current editor content with this file? (Cancel = insert at cursor)")){
+        insertAtCursor("\n\n" + text);
+      } else {
+        applyContentEdit(() => { editor.value = text; });
+        saveContent(); queueRender();
+        if (curNote && curNote.title === "Untitled note"){
+          const t = (file.name || "").replace(/\.[^.]+$/, "").trim();
+          if (t){ curNote.title = t.slice(0, 120); const el = $("#note-title"); if (el) el.value = curNote.title; saveNotesStore(); }
+        }
+        toast("Loaded " + (file.name || "file"));
+      }
+    } catch(e) {
+    console.error(e);
+    toast("Could not read that file: " + (e.message || e));
+  }
+}
+async function handleFiles(files){
+  for (const file of [...(files || [])]){
+    if (file.type && file.type.startsWith("image/")) await handleImageFile(file);
+    else await handleMdFile(file);
+  }
+}
+editor.addEventListener("paste", async ev => {
+  const items = [...(ev.clipboardData?.files || [])];
+  if (items.length){ ev.preventDefault(); await handleFiles(items); }
+});
+function dragHasFiles(e){ return [...(e.dataTransfer?.types || [])].includes("Files"); }
+document.addEventListener("dragover", e => {
+  if (!dragHasFiles(e)) return; // preserve ordinary text drag-and-drop into the textarea
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  document.body.classList.add("dragging");
+});
+document.addEventListener("dragleave", e => { if (!e.relatedTarget) document.body.classList.remove("dragging"); });
+document.addEventListener("dragend", () => document.body.classList.remove("dragging"));
+document.addEventListener("drop", async e => {
+  const files = [...(e.dataTransfer?.files || [])];
+  document.body.classList.remove("dragging");
+  if (!files.length) return; // let the browser handle dropped text normally
+  e.preventDefault();
+  await handleFiles(files);
+});
+
+/* ---------------- buttons ---------------- */
+$("#btn-sample").addEventListener("click", () => {
+  if (editor.value.trim() && editor.value !== SAMPLE && !confirm("Replace editor content with the Unit-4 sample?")) return;
+  applyContentEdit(() => { editor.value = SAMPLE; });
+  saveContent(); renderNow().catch(reportRenderError); toast("Sample loaded");
+});
+$("#btn-clear").addEventListener("click", () => {
+  if (!confirm("Clear the editor?")) return;
+  applyContentEdit(() => { editor.value = ""; });
+  saveContent(); renderNow().catch(reportRenderError);
+});
+$("#btn-import").addEventListener("click", () => $("#file-md").click());
+$("#file-md").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) handleMdFile(f); });
+$("#btn-image").addEventListener("click", () => $("#file-img").click());
+$("#file-img").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) handleImageFile(f); });
+
+$("#btn-topic").addEventListener("click", () => {
+  const pos = editor.selectionStart ?? 0;
+  const lineStart = editor.value.lastIndexOf("\n", Math.max(0, pos - 1)) + 1;
+  const lineEndIdx = editor.value.indexOf("\n", pos);
+  const line = editor.value.slice(lineStart, lineEndIdx === -1 ? editor.value.length : lineEndIdx);
+  if (/<!--\s*keep-topic\s*-->/.test(line)){ toast("This line already carries a keep-topic tag."); return; }
+  commitPendingEdit();
+  const prev = editor.value;
+  editor.setRangeText("<" + "!-- keep-topic --" + ">\n", lineStart, lineStart, "end");
+  if (editor.value !== prev) doPush(prev);
+  committedBase = editor.value;
+  saveContent(); queueRender(); updateHistUI();
+  toast("Topic tag added — that section will stay in one column");
+});
+
+/* ---------------- note name, notes library, theme, undo/redo ---------------- */
+const titleInputEl = $("#note-title");
+if (titleInputEl){
+  titleInputEl.addEventListener("change", () => renameCurrent(titleInputEl.value));
+  titleInputEl.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); titleInputEl.blur(); } });
+}
+$("#btn-undo").addEventListener("click", doUndo);
+$("#btn-redo").addEventListener("click", doRedo);
+editor.addEventListener("keydown", e => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "z" && !e.shiftKey){ e.preventDefault(); doUndo(); }
+  else if ((k === "z" && e.shiftKey) || k === "y"){ e.preventDefault(); doRedo(); }
+});
+
+const notesDlg = $("#notesdlg");
+function renderNotesList(){
+  const list = $("#notes-list");
+  if (!list || !NOTES_STORE) return;
+  list.innerHTML = "";
+  const rows = [...NOTES_STORE.notes].sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  if (!rows.length){
+    const empty = document.createElement("div");
+    empty.className = "notes-empty"; empty.textContent = "No notes yet — create one below.";
+    list.appendChild(empty); return;
+  }
+  rows.forEach(n => {
+    const row = document.createElement("div");
+    row.className = "note-row" + (n.id === curNote.id ? " current" : "");
+    const ti = document.createElement("input");
+    ti.className = "note-row-title"; ti.value = n.title; ti.maxLength = 120;
+    ti.setAttribute("aria-label", "Rename note");
+    ti.title = "Rename";
+    ti.addEventListener("change", () => {
+      const t = (ti.value || "").trim().slice(0, 120);
+      if (!t){ ti.value = n.title; return; }
+      n.title = t;
+      if (n === curNote){ const el = $("#note-title"); if (el) el.value = t; }
+      saveNotesStore();
+    });
+    ti.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); ti.blur(); } });
+    row.appendChild(ti);
+    if (n.id === curNote.id){
+      const badge = document.createElement("span");
+      badge.className = "note-row-badge"; badge.textContent = "editing";
+      row.appendChild(badge);
+    }
+    const meta = document.createElement("span");
+    meta.className = "note-row-meta";
+    const d = new Date(n.updated || Date.now());
+    meta.textContent = d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " +
+      d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    row.appendChild(meta);
+    const open = document.createElement("button");
+    open.className = "btn small note-row-open"; open.textContent = "Open";
+    if (n.id === curNote.id) open.disabled = true;
+    open.addEventListener("click", () => { notesDlg.close(); switchToNote(n.id); });
+    row.appendChild(open);
+    const del = document.createElement("button");
+    del.className = "btn small ghost icon-only note-row-del";
+    del.title = "Delete this note"; del.setAttribute("aria-label", "Delete note");
+    del.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>';
+    del.addEventListener("click", () => {
+      if (confirm('Delete "' + n.title + '"? This cannot be undone.')){ deleteNote(n.id); renderNotesList(); }
+    });
+    row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+$("#btn-notes").addEventListener("click", () => {
+  renderNotesList();
+  try { notesDlg.showModal(); } catch(e){ notesDlg.setAttribute("open", ""); }
+});
+$("#btn-notes-close").addEventListener("click", () => notesDlg.close());
+$("#btn-new-note").addEventListener("click", () => {
+  notesDlg.close();
+  createNote();
+  toast("New note — give it a name above the editor");
+  const el = $("#note-title");
+  if (el){ el.focus(); el.select(); }
+});
+$("#btn-theme").addEventListener("click", () => setSettings({ uiTheme: S.uiTheme === "dark" ? "light" : "dark" }, false));
+$("#btn-download-md").addEventListener("click", () => {
+  // Tags are expanded so the saved .md is fully self-contained (images included).
+  const url = URL.createObjectURL(new Blob([expandRefs(editor.value)], { type:"text/markdown;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = (safeFileName(curNote && curNote.title) || "g-note") + ".md";
+  document.body.appendChild(a); // required by some browsers for a synthetic download click
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+});
+const APP_TITLE = document.title;
+$("#btn-print").addEventListener("click", async () => {
+  const btn = $("#btn-print");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    await flushRender(); // never print a stale preview after a just-typed edit / slider move
+    document.title = safeFileName(curNote && curNote.title) || "g-note";   // nice default PDF filename = note name
+    window.print();
+  } catch(e) {
+    reportRenderError(e);
+  } finally {
+    document.title = APP_TITLE;
+    btn.disabled = false;
+  }
+});
+window.addEventListener("afterprint", () => { document.title = APP_TITLE; });
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+/* ---------------- boot ---------------- */
+applySettingsToControls(); applyCSSVars();
+initNotes();                        // notes library + content mirror (synchronous → refresh-safe)
+HIST_STORE = loadHistoryStore();
+committedBase = editor.value;
+updateHistUI();
+/* Embedded images: let the browser store open (short grace period), migrate any
+   legacy inline base64 blobs into stored tags, then render ONCE. Migrating
+   before the first render keeps the preview from flickering or re-paginating
+   after load. */
+IMG_READY.then(async () => {
+  try {
+    const migrated = await extractInlineImages(editor.value);
+    if (migrated !== editor.value){
+      editor.value = migrated; committedBase = migrated; saveContent();
+    }
+  } catch(e){ console.error(e); }
+  renderNow().catch(reportRenderError);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => queueRepaginate()).catch(() => {});
+});
+/* Last-resort flush: a tab close, refresh or backgrounding can never cost a
+   keystroke, an undo step or the note library. */
+function flushEverything(){
+  commitPendingEdit(); persistHistory(); flushNotesSave();
+  lsSet(LS_CONTENT, editor.value, false);
+}
+window.addEventListener("pagehide", flushEverything);
+window.addEventListener("beforeunload", flushEverything);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushEverything(); });
+</script>
+</body>
+</html>

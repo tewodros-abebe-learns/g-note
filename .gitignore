@@ -1,0 +1,22 @@
+# Python tooling caches (build/tests only — never part of the deployed site)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Vercel
+node_modules/
+.vercel/
+npm-debug.log*
+yarn-error.log*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Local test scratch
+/tmp/
+*.local
