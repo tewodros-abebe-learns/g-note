@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>G/note. — Markdown + LaTeX → GPAI-style cheat-sheet PDF</title>
+<meta name="description" content="G/note. — paste Markdown and LaTeX and export a dense, GPAI-style multi-column cheat-sheet PDF.">
+<meta name="theme-color" content="#f7b955">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%23171310'/%3E%3Ctext x='32' y='43' font-family='Arial,sans-serif' font-size='27' font-weight='700' fill='%23f7b955' text-anchor='middle'%3EG/%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="sheet.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="brand-wrap">
+    <div class="logo-mark" aria-hidden="true">G/</div>
+    <div class="brand-copy">
+      <h1>G/<span class="brand-note">note.</span></h1>
+      <p>Markdown + LaTeX → print-ready notes</p>
+    </div>
+  </div>
+
+  <div class="header-center">
+    <span class="stats" id="stats">— words · — formulas · — pages</span>
+    <button class="errbadge" id="errbadge" title="Show rendering problems"></button>
+  </div>
+
+  <div class="header-actions">
+    <button class="btn" id="btn-notes" title="Create, open and rename notes" aria-haspopup="dialog">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M8 4h11a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H8"/><path d="M8 4v16H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3Z"/><path d="M11 8h5M11 12h5M11 16h3"/></svg>
+      <span class="btn-label">Notes</span>
+    </button>
+
+    <button class="btn icon-only" id="btn-theme" aria-pressed="false" title="Switch to dark mode" aria-label="Toggle dark mode">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M20.4 14.6A8.6 8.6 0 0 1 9.4 3.6 8.9 8.9 0 1 0 20.4 14.6Z"/></svg>
+    </button>
+
+    <button class="btn" id="btn-design" aria-expanded="true" title="Show or hide design controls">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      <span class="btn-label">Design</span>
+    </button>
+
+    <details class="help-menu" id="helpbox">
+      <summary class="btn icon-only" title="Syntax help" aria-label="Syntax help">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2A2.6 2.6 0 1 1 12 14.2v.3"/><path d="M12 17.2h.01"/></svg>
+      </summary>
+      <div class="helpbody">
+        <h3>What you can paste</h3>
+        <ul>
+          <li><b>Headings:</b> <code>#</code> title / section, <code>##</code> ruled GPAI section, <code>###</code> sub-section.</li>
+          <li><b>Math:</b> inline <code>$F=ma$</code> or <code>\(F=ma\)</code>; display <code>$$E_k=\tfrac12 mv^2$$</code> or <code>\[...\]</code>; also <code>\begin{aligned}…\end{aligned}</code>, <code>cases</code>, <code>pmatrix</code> etc. (KaTeX).</li>
+          <li><b>Tables:</b> normal Markdown (GFM) tables. Narrow (2–3 col) tables fit best; wide tables auto-shrink/wrap.</li>
+          <li><b>Images:</b> <code>![caption](https://…)</code>, or use the image button, or <b>paste / drag an image</b> into the editor — it embeds automatically and shows up as a short <code>![name](gnote-img:…)</code> tag in the editor (the preview and the PDF still show the full image).</li>
+          <li><b>Links:</b> <code>[text](https://…)</code> — clickable in the exported PDF.</li>
+          <li><b>Breaks:</b> <code>&lt;!-- column-break --&gt;</code> and <code>&lt;!-- page-break --&gt;</code> on their own line force a new column/page; <code>&lt;!-- keep-topic --&gt;</code> above a section keeps that whole section in one column (the ▤ button in the editor inserts it at your cursor line).</li>
+          <li><b>Raw HTML</b> (e.g. an inline <code>&lt;svg&gt;</code> diagram) passes through after sanitising.</li>
+        </ul>
+        <h3>Design controls</h3>
+        <p>Start with a preset, then fine-tune. Design controls affect the sheet only — not this interface. You can change the sheet <b>background colour</b> and <b>font</b> (Serif is the exact GPAI original), spacing <b>between words</b>, <b>after sentences</b> and <b>after paragraphs</b>, and text <b>boldness</b> — body weight changes ordinary text, while emphasis and heading weights can be tuned separately under <b>Typography → Emphasis</b>.</p>
+        <p>Two flow modes live in the panel: <b>Line flow → Whole words</b> stops words being hyphenated across lines (“quanti-tative”), and <b>Layout → Keep topics intact</b> moves a section that no longer fits in a column to the top of the next one instead of starting it at the column foot. Both are off by default because the GPAI original hyphenates and splits freely; turn them on when you prefer the cleaner look. The <b>GPAI preset</b> (and a full reset) restores the original look exactly: white sheet, serif, single sentence spacing.</p>
+        <h3>Notes, autosave &amp; undo</h3>
+        <ul>
+          <li>Everything — content, note names, design — is <b>saved automatically in this browser</b>. No account, and refreshing or closing the tab never loses work.</li>
+          <li><b>Notes</b> (top bar) creates, opens, renames and deletes notes. The name above the editor renames the open note, and it also becomes the exported PDF / .md filename.</li>
+          <li><b>Undo / redo</b> buttons (or Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y) step through up to 3 edits in each direction — and they survive a reload.</li>
+          <li>The moon button toggles <b>dark mode</b> for the interface. The sheet and the exported PDF always keep exactly the colours you designed.</li>
+        </ul>
+        <h3>Getting a perfect PDF</h3>
+        <p>Click <b>Export</b> (above the preview), then in the print dialog choose <b>Save as PDF</b>, paper <b id="help-paper">A4</b>, <b>Margins: None</b>, <b>Scale: 100%</b>, enable <b>Background graphics</b>, disable headers/footers. The PDF keeps selectable text, vector math and clickable links.</p>
+        <h3>GPAI formula block (copy the pattern)</h3>
+        <pre>### The Net Force Formula
+$$\vec{F}=m\vec{a}$$
+- **Components:**
+  - $\vec{F}$: Net force, in Newtons (N).
+  - $m$: Mass, in kilograms (kg).
+- **Application:** Find acceleration from a known force.</pre>
+      </div>
+    </details>
+
+  </div>
+
+  <input type="file" id="file-md" accept=".md,.markdown,.txt,text/plain" hidden>
+  <input type="file" id="file-img" accept="image/*" hidden>
+</header>
+
+<main>
+  <!-- ================= Content ================= -->
+  <section class="editor-pane" aria-label="Markdown editor">
+    <div class="pane-head">
+      <div class="pane-title">
+        <span class="pane-kicker">01</span>
+        <strong>Content</strong>
+        <input id="note-title" class="note-title" maxlength="120" spellcheck="false"
+               title="Name this note — click to rename" aria-label="Note name" value="Untitled note">
+      </div>
+      <div class="pane-actions">
+        <button class="btn small ghost icon-only" id="btn-undo" title="Undo (Ctrl+Z) — up to 3 edits" aria-label="Undo" disabled>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M8 7 4 11l4 4"/><path d="M4 11h9a6 6 0 0 1 0 12h-3"/></svg>
+        </button>
+        <button class="btn small ghost icon-only" id="btn-redo" title="Redo (Ctrl+Shift+Z) — up to 3 edits" aria-label="Redo" disabled>
+          <svg class="icon" viewBox="0 0 24 24"><path d="m16 7 4 4-4 4"/><path d="M20 11h-9a6 6 0 0 0 0 12h3"/></svg>
+        </button>
+        <span class="act-sep" aria-hidden="true"></span>
+        <button class="btn small ghost" id="btn-sample" title="Load the built-in Unit 4 sample">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+          <span class="btn-label">Sample</span>
+        </button>
+        <button class="btn small ghost" id="btn-import" title="Import a Markdown or text file">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M12 16V5"/><path d="m7 9 5-5 5 5"/><path d="M4 19h16"/></svg>
+          <span class="btn-label">Import</span>
+        </button>
+        <button class="btn small ghost" id="btn-image" title="Insert an image at the cursor">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m5 18 5-5 3 3 2.5-2.5L21 19"/></svg>
+          <span class="btn-label">Image</span>
+        </button>
+        <button class="btn small ghost icon-only" id="btn-topic" title="Keep this topic in one column — inserts a keep-topic tag above the current line" aria-label="Keep topic in one column">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8"/><path d="M8 13h8"/><path d="M8 17h4"/></svg>
+        </button>
+        <button class="btn small ghost" id="btn-download-md" title="Save the editor content as Markdown">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5Z"/><path d="M8 3v6h8"/><path d="M8 21v-7h8v7"/></svg>
+          <span class="btn-label">Save .md</span>
+        </button>
+        <button class="btn small ghost icon-only" id="btn-clear" title="Clear editor" aria-label="Clear editor">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v5M14 11v5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <textarea id="editor" spellcheck="false" placeholder="Paste Markdown + LaTeX here…" aria-label="Cheat sheet Markdown and LaTeX content"></textarea>
+
+    <div class="editor-footer">
+      <span class="dot" aria-hidden="true"></span>
+      <span>Saved in this browser · Paste or drop images &amp; .md files</span>
+      <span class="editor-meta" id="editor-meta">0 lines</span>
+    </div>
+  </section>
+
+  <!-- ================= Design ================= -->
+  <aside class="inspector" id="controls" aria-label="Design controls">
+    <div class="inspector-head">
+      <div class="inspector-head-row">
+        <div>
+          <h2>Design <span class="accent-serif">studio</span></h2>
+          <p>Style the sheet without changing your content.</p>
+        </div>
+        <button type="button" class="btn small ghost icon-only inspector-close" id="btn-close-design" aria-label="Close design panel" title="Close design panel">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></svg>
+        </button>
+      </div>
+      <div class="preset-label">Preset</div>
+      <div class="preset-grid" role="group" aria-label="Style presets">
+        <button type="button" class="preset-chip" data-preset="gpai">GPAI</button>
+        <button type="button" class="preset-chip" data-preset="compact">Compact</button>
+        <button type="button" class="preset-chip" data-preset="readable">Readable</button>
+        <button type="button" class="preset-chip" data-preset="spacious">Spacious</button>
+      </div>
+    </div>
+
+    <details class="design-section" open>
+      <summary>
+        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>
+        Layout
+      </summary>
+      <div class="section-body">
+        <div class="field">
+          <div class="field-head"><label>Columns</label></div>
+          <div class="segmented" id="seg-cols" role="group" aria-label="Number of columns">
+            <button type="button" data-value="2">2</button>
+            <button type="button" data-value="3">3</button>
+            <button type="button" data-value="4">4</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label>Paper</label></div>
+          <div class="segmented" id="seg-paper" role="group" aria-label="Paper size">
+            <button type="button" data-value="a4">A4</button>
+            <button type="button" data-value="letter">US Letter</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label>Sheet background</label><output id="val-sheetbg">#FFFFFF</output></div>
+          <div class="swatches" id="sw-sheetbg" role="group" aria-label="Sheet background colour">
+            <button type="button" class="swatch" data-value="#ffffff" style="--sw:#ffffff" title="White — the GPAI original" aria-label="White background"></button>
+            <button type="button" class="swatch" data-value="#fff6e9" style="--sw:#fff6e9" title="Cream" aria-label="Cream background"></button>
+            <button type="button" class="swatch" data-value="#fdf0cd" style="--sw:#fdf0cd" title="Butter" aria-label="Butter background"></button>
+            <button type="button" class="swatch" data-value="#eef3ec" style="--sw:#eef3ec" title="Sage" aria-label="Sage background"></button>
+            <button type="button" class="swatch" data-value="#edf1f6" style="--sw:#edf1f6" title="Mist" aria-label="Mist background"></button>
+            <label class="swatch swatch-custom" title="Custom colour"><input type="color" id="opt-sheetbg-custom" value="#ffffff" aria-label="Custom sheet background colour"></label>
+          </div>
+          <div class="field-hint">The printed page colour. White matches the original GPAI sheet exactly — keep “Background graphics” ON when exporting a tinted sheet.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-margin">Page margin</label><output id="val-margin" for="opt-margin">10mm</output></div>
+          <input type="range" id="opt-margin" min="8" max="15" step="0.5" value="10">
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-colgap">Space between columns</label><output id="val-colgap" for="opt-colgap">4.8mm</output></div>
+          <input type="range" id="opt-colgap" min="3" max="8" step="0.2" value="4.8">
+        </div>
+        <label class="switch-row">
+          <span class="switch-copy"><strong>Keep topics intact</strong><span>A section that no longer fits in a column moves whole to the top of the next one (instead of starting at the column foot). Sections taller than a column still split.</span></span>
+          <span class="switch"><input type="checkbox" id="opt-topicfit"><i></i></span>
+        </label>
+      </div>
+    </details>
+
+    <details class="design-section" open>
+      <summary>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M5 5V3h14v2"/><path d="M12 3v18"/><path d="M9 21h6"/></svg>
+        Typography
+      </summary>
+      <div class="section-body">
+        <div class="field">
+          <div class="field-head"><label>Font</label></div>
+          <div class="segmented seg-fonts" id="seg-fontfamily" role="group" aria-label="Sheet font">
+            <button type="button" data-value="serif">Serif · GPAI</button>
+            <button type="button" data-value="sans">Sans</button>
+            <button type="button" data-value="georgia">Georgia</button>
+            <button type="button" data-value="jakarta">Jakarta</button>
+          </div>
+          <div class="field-hint">Serif is the exact GPAI original (Liberation Serif). Formulas always typeset in KaTeX.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-font">Font size</label><output id="val-font" for="opt-font">6.5pt</output></div>
+          <input type="range" id="opt-font" min="6" max="9" step="0.25" value="6.5">
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-line">Line spacing</label><output id="val-line" for="opt-line">1.24×</output></div>
+          <input type="range" id="opt-line" min="1.05" max="1.6" step="0.01" value="1.24">
+          <div class="field-hint">This is the previous “density” control, now adjustable precisely.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-word">Space between words</label><output id="val-word" for="opt-word">0em</output></div>
+          <input type="range" id="opt-word" min="-0.05" max="0.3" step="0.01" value="0">
+          <div class="field-hint">Adds or removes base word space. Justified text may stretch it to fill each line.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-sentence">Space after sentences</label><output id="val-sentence" for="opt-sentence">0em</output></div>
+          <input type="range" id="opt-sentence" min="0" max="0.6" step="0.02" value="0">
+          <div class="field-hint">Extra space after <b>. ! ?</b> before the next sentence — classic double-spacing, adjustable. 0 is the GPAI original.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-paragraph">Space after paragraphs</label><output id="val-paragraph" for="opt-paragraph">0.42em</output></div>
+          <input type="range" id="opt-paragraph" min="0" max="1.2" step="0.01" value="0.42">
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-body-weight">Body text boldness</label><output id="val-body-weight" for="opt-body-weight">400</output></div>
+          <input type="range" id="opt-body-weight" min="400" max="700" step="50" value="400">
+          <div class="field-hint">400 is GPAI regular; 700 makes ordinary body text fully bold.</div>
+        </div>
+
+        <details class="subdetails">
+          <summary>More spacing</summary>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-letter">Space between letters</label><output id="val-letter" for="opt-letter">0em</output></div>
+            <input type="range" id="opt-letter" min="-0.03" max="0.08" step="0.005" value="0">
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-list-gap">Space between list items</label><output id="val-list-gap" for="opt-list-gap">0.14em</output></div>
+            <input type="range" id="opt-list-gap" min="0" max="0.6" step="0.01" value="0.14">
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-list-indent">List indentation</label><output id="val-list-indent" for="opt-list-indent">1.35em</output></div>
+            <input type="range" id="opt-list-indent" min="0.8" max="2.4" step="0.05" value="1.35">
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-heading-before">Space before headings</label><output id="val-heading-before" for="opt-heading-before">0.95em</output></div>
+            <input type="range" id="opt-heading-before" min="0" max="1.8" step="0.01" value="0.95">
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-heading-after">Space after headings</label><output id="val-heading-after" for="opt-heading-after">0.40em</output></div>
+            <input type="range" id="opt-heading-after" min="0" max="1" step="0.01" value="0.4">
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-first-indent">Paragraph first-line indent</label><output id="val-first-indent" for="opt-first-indent">0em</output></div>
+            <input type="range" id="opt-first-indent" min="0" max="1.5" step="0.05" value="0">
+          </div>
+        </details>
+
+        <details class="subdetails">
+          <summary>Emphasis &amp; headings</summary>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-emphasis-weight">Bold emphasis weight</label><output id="val-emphasis-weight" for="opt-emphasis-weight">700</output></div>
+            <input type="range" id="opt-emphasis-weight" min="500" max="900" step="50" value="700">
+            <div class="field-hint">Controls <b>**bold**</b> Markdown and table headers.</div>
+          </div>
+
+          <div class="field">
+            <div class="field-head"><label for="opt-heading-weight">Heading weight</label><output id="val-heading-weight" for="opt-heading-weight">700</output></div>
+            <input type="range" id="opt-heading-weight" min="500" max="900" step="50" value="700">
+          </div>
+        </details>
+
+        <label class="switch-row">
+          <span class="switch-copy"><strong>Justify text</strong><span>Align both left and right edges</span></span>
+          <span class="switch"><input type="checkbox" id="opt-justify" checked><i></i></span>
+        </label>
+        <div class="field" style="margin-top:9px">
+          <div class="field-head"><label>Line flow</label></div>
+          <div class="segmented" id="seg-hyphens" role="group" aria-label="Line flow">
+            <button type="button" data-value="hyphenated" aria-pressed="true">Hyphenate · GPAI</button>
+            <button type="button" data-value="whole" aria-pressed="false">Whole words</button>
+          </div>
+          <p class="field-hint">Whole words never breaks a word across lines (no “quanti-tative”); justified lines may stretch a little more. Hyphenate is the exact GPAI original.</p>
+        </div>
+      </div>
+    </details>
+
+    <details class="design-section" open>
+      <summary>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16M4 12h10M4 19h16"/><path d="M18.5 9.5v5"/></svg>
+        Content spacing
+      </summary>
+      <div class="section-body">
+        <p class="section-note">Control breathing room around formulas and tables independently from paragraphs.</p>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-math-gap">Space around display formulas</label><output id="val-math-gap" for="opt-math-gap">0.35em</output></div>
+          <input type="range" id="opt-math-gap" min="0" max="1" step="0.01" value="0.35">
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label for="opt-table-pad">Table cell padding</label><output id="val-table-pad" for="opt-table-pad">0.22em</output></div>
+          <input type="range" id="opt-table-pad" min="0.05" max="0.6" step="0.01" value="0.22">
+        </div>
+
+        <label class="switch-row">
+          <span class="switch-copy"><strong>Section rules</strong><span>Thin line above major sections</span></span>
+          <span class="switch"><input type="checkbox" id="opt-rules" checked><i></i></span>
+        </label>
+      </div>
+    </details>
+
+    <details class="design-section">
+      <summary>
+        <svg class="icon" viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7Z"/><path d="M15 3v5h5"/><path d="M9 17h9"/></svg>
+        Page details
+      </summary>
+      <div class="section-body">
+        <div class="field">
+          <div class="field-head"><label for="opt-footer">Footer text</label></div>
+          <input class="text-input" type="text" id="opt-footer" maxlength="300" placeholder="e.g. G11 Physics · your name">
+        </div>
+
+        <label class="switch-row">
+          <span class="switch-copy"><strong>Page numbers</strong><span>Shown at the bottom-right of each page</span></span>
+          <span class="switch"><input type="checkbox" id="opt-pageno"><i></i></span>
+        </label>
+      </div>
+    </details>
+
+    <details class="design-section">
+      <summary>
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-3.8-3.8"/><path d="M11 8.5v5M8.5 11h5"/></svg>
+        Preview
+      </summary>
+      <div class="section-body">
+        <div class="field">
+          <div class="field-head"><label for="opt-zoom">Zoom</label><output id="val-zoom" for="opt-zoom">100%</output></div>
+          <input type="range" id="opt-zoom" min="0.35" max="1.3" step="0.01" value="1">
+        </div>
+        <div class="view-actions">
+          <button type="button" class="btn small" id="btn-fit">Fit page</button>
+          <button type="button" class="btn small" id="btn-zoom-100">100%</button>
+        </div>
+        <div class="field-hint"><b>Fit page</b> keeps the whole sheet visible as the window or Design panel changes. Moving the slider switches to manual zoom. Either way, the PDF always exports at true page size.</div>
+      </div>
+    </details>
+
+    <div class="inspector-foot">
+      <button type="button" class="btn reset-btn" id="btn-reset-style">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 4v6h6"/><path d="M5.5 10a8 8 0 1 1-.5 5"/></svg>
+        Reset all design settings
+      </button>
+    </div>
+  </aside>
+
+  <!-- ================= Preview ================= -->
+  <section class="preview-pane" id="preview-pane" aria-label="Rendered sheet preview">
+    <div class="preview-toolbar">
+      <span class="spacer"></span>
+      <button class="btn primary" id="btn-print" title="Open print dialog to save as PDF">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>
+        <span class="btn-label">Export</span>
+      </button>
+    </div>
+    <div class="pages" id="pages"></div>
+  </section>
+</main>
+<dialog id="notesdlg" aria-label="Your notes">
+  <div class="notes-dlg-head">
+    <h3>Your <span class="accent-serif">notes</span></h3>
+    <button class="btn small ghost icon-only" id="btn-notes-close" aria-label="Close" title="Close">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="notes-list" id="notes-list"></div>
+  <div class="notes-dlg-foot">
+    <button class="btn small primary" id="btn-new-note">+ New note</button>
+    <span class="hint">Notes are saved in this browser automatically — no account needed.</span>
+  </div>
+</dialog>
+
+<dialog id="errors">
+  <h3 style="margin-top:0">Rendering problems</h3>
+  <p style="font-size:13px;color:#555">These formulas/items could not be rendered cleanly. Fix them in the editor — usually an unclosed <code>$</code>, a missing brace, or a LaTeX command KaTeX doesn't support.</p>
+  <ul id="errlist"></ul>
+  <button class="btn" id="btn-close-errors">Close</button>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/lib/marked.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script>
+/* G/note. online build: the app code ships as 4 text parts (byte-identical
+   to the single <script> in the downloadable offline build). Fetch, join
+   and run them as one script so semantics are exactly preserved. */
+(async () => {
+  try {
+    let code = "";
+    for (const part of ["app-1.js", "app-2.js", "app-3.js", "app-4.js"]) {
+      const r = await fetch(part);
+      if (!r.ok) throw new Error("Could not load " + part + " (" + r.status + ")");
+      code += await r.text();
+    }
+    const s = document.createElement("script");
+    s.textContent = code;
+    document.body.appendChild(s);
+  } catch (e) {
+    const d = document.createElement("div");
+    d.className = "fatal-error";
+    d.setAttribute("role", "alert");
+    d.innerHTML = "<strong>G/note. could not finish loading.</strong>" +
+      String((e && e.message) || e) + " Check your connection and reload.";
+    (document.getElementById("pages") || document.body).appendChild(d);
+  }
+})();
+</script>
+</body>
+</html>
