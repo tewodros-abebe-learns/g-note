@@ -169,10 +169,12 @@ svg.icon{width:16px;height:16px;flex:0 0 auto;stroke:currentColor;fill:none;stro
 /* ============================= Workspace ============================= */
 main{
   flex:1;min-height:0;display:grid;
-  grid-template-columns:minmax(340px,39%) 292px minmax(0,1fr);
+  grid-template-columns:208px minmax(300px,30%) 292px minmax(0,1fr);
   background:var(--canvas);
 }
-body.design-closed main{grid-template-columns:minmax(340px,40%) minmax(0,1fr)}
+body.design-closed main{grid-template-columns:208px minmax(340px,38%) minmax(0,1fr)}
+body.outline-closed main{grid-template-columns:minmax(340px,39%) 292px minmax(0,1fr)}
+body.outline-closed.design-closed main{grid-template-columns:minmax(340px,40%) minmax(0,1fr)}
 body.design-closed .inspector{display:none}
 
 .pane-head{
@@ -502,10 +504,73 @@ dialog#notesdlg::backdrop{background:rgba(43,32,14,.45);backdrop-filter:blur(2px
 [data-theme="dark"] .preview-pane{scrollbar-color:#4c4132 transparent}
 [data-theme="dark"] .notes-dlg-foot{border-top-color:var(--line)}
 
+/* ============================= Outline panel (left) ============================= */
+.outline-pane{
+  min-width:0;min-height:0;display:flex;flex-direction:column;
+  background:var(--panel-2);border-right:1px solid var(--line);
+}
+body.outline-closed .outline-pane{display:none}
+.outline-head{padding:11px 12px 9px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+.outline-head-row{display:flex;align-items:center;gap:6px}
+.outline-head-row>.outline-head-left{display:flex;align-items:center;gap:6px;min-width:0;margin-right:auto}
+.outline-kicker{font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);font-weight:800}
+.outline-title{font-size:12.5px;font-weight:700;color:var(--ink);white-space:nowrap}
+.outline-close{display:none;flex:0 0 auto}
+.outline-count{
+  margin-top:4px;font-size:10.5px;color:var(--muted);line-height:1.35;
+  font-variant-numeric:tabular-nums;
+}
+.outline-list{
+  flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:4px 0 20px;scrollbar-width:thin;scrollbar-color:#e0cba3 transparent;
+}
+.outline-page{padding-top:2px}
+/* a page's outline is a block of its own: the next page starts after a rule */
+.outline-page + .outline-page{
+  margin-top:9px;padding-top:9px;border-top:1px dashed var(--line-strong);
+}
+.outline-page-label{
+  position:sticky;top:0;z-index:1;
+  display:flex;align-items:center;gap:6px;margin:0 12px 3px;padding:4px 0 3px;
+  background:var(--panel-2);
+  font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+}
+.outline-page-label::after{content:"";flex:1 1 auto;height:1px;background:var(--line)}
+.outline-item{
+  display:block;width:calc(100% - 8px);margin:0 4px;text-align:left;
+  border:0;border-left:2px solid transparent;border-radius:7px;
+  background:transparent;color:var(--ink-2);
+  font-family:inherit;font-size:11.5px;font-weight:500;line-height:1.3;
+  padding:4px 8px 4px 10px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;
+}
+.outline-item:hover{background:#fff3df;color:var(--ink)}
+.outline-item:focus-visible{outline:2px solid rgba(224,138,0,.55);outline-offset:-2px}
+.outline-item.lvl-1{font-weight:700;color:var(--ink)}
+.outline-item.lvl-2{padding-left:20px}
+.outline-item.lvl-3{padding-left:30px;font-size:11px;color:var(--muted)}
+.outline-item.lvl-4,.outline-item.lvl-5,.outline-item.lvl-6{padding-left:39px;font-size:10.5px;color:var(--muted)}
+.outline-item.current{background:var(--brand-soft);border-left-color:var(--accent);color:var(--ink);font-weight:700}
+.outline-item.cont::before{content:"↳";display:inline-block;width:11px;margin-left:-11px;color:var(--faint)}
+.outline-empty{padding:16px 14px;color:var(--muted);font-size:11.5px;line-height:1.5}
+/* brief marker on the heading you jumped to (paint only — never moves layout) */
+.outline-flash{animation:outlineFlash .95s ease}
+@media print{ .outline-flash{animation:none !important;background-color:transparent !important} }
+@keyframes outlineFlash{
+  0%{background-color:transparent}
+  22%,58%{background-color:rgba(247,185,85,.5)}
+  100%{background-color:transparent}
+}
+[data-theme="dark"] .outline-item:hover{background:#2e271d;color:var(--ink)}
+[data-theme="dark"] .outline-item.current{background:var(--brand-soft)}
+[data-theme="dark"] .outline-list{scrollbar-color:#4c4132 transparent}
+
 /* ============================= Responsive ============================= */
 @media (max-width:1180px){
   main{grid-template-columns:minmax(320px,42%) minmax(0,1fr)}
   body.design-closed main{grid-template-columns:minmax(320px,42%) minmax(0,1fr)}
+  body.outline-closed main{grid-template-columns:minmax(320px,42%) minmax(0,1fr)}
+  body.outline-closed.design-closed main{grid-template-columns:minmax(320px,42%) minmax(0,1fr)}
   .inspector{
     position:fixed;top:var(--header-h);right:0;bottom:0;width:min(310px,88vw);z-index:70;
     box-shadow:-18px 0 45px rgba(94,64,18,.2);border-left:1px solid var(--line);border-right:0;
@@ -513,6 +578,15 @@ dialog#notesdlg::backdrop{background:rgba(43,32,14,.45);backdrop-filter:blur(2px
   body.design-closed .inspector{display:block;transform:translateX(105%);pointer-events:none}
   .inspector{transition:transform .22s ease}
   .inspector-close{display:inline-flex}
+  /* the outline becomes a left drawer so the sheet keeps the full width */
+  .outline-pane{
+    position:fixed;top:var(--header-h);left:0;bottom:0;width:min(268px,86vw);z-index:70;
+    box-shadow:18px 0 45px rgba(94,64,18,.2);border-right:1px solid var(--line);
+    transition:transform .22s ease;
+  }
+  body.outline-closed .outline-pane{display:flex;transform:translateX(-105%);pointer-events:none}
+  .outline-close{display:inline-flex}
+  .outline-page-label{background:var(--panel-2)}
   .brand-copy p{display:none}
   .header-center{margin-left:2px}
 }
@@ -528,6 +602,9 @@ dialog#notesdlg::backdrop{background:rgba(43,32,14,.45);backdrop-filter:blur(2px
   .header-actions .btn.primary .btn-label{display:inline}
   main{display:flex;flex-direction:column;overflow:visible}
   body.design-closed main{display:flex}
+  body.outline-closed main{display:flex}
+  body.outline-closed.design-closed main{display:flex}
+  .outline-pane{width:min(300px,90vw)}
   .editor-pane{height:48vh;min-height:360px;border-right:0;border-bottom:1px solid var(--line);flex:0 0 auto}
   .preview-pane{min-height:60vh;overflow:auto;padding:14px 8px 44px;flex:1 0 auto}
   .pane-actions .btn .btn-label{display:none}
@@ -545,7 +622,7 @@ dialog#notesdlg::backdrop{background:rgba(43,32,14,.45);backdrop-filter:blur(2px
 @page{size:A4;margin:0}
 @media print{
   body{background:#fff;display:block;overflow:visible}
-  .app-header,.inspector,.editor-pane,.preview-toolbar,.toast,.fatal-error{display:none !important}
+  .app-header,.inspector,.editor-pane,.preview-toolbar,.toast,.fatal-error,.outline-pane{display:none !important}
   main{display:block}
   .preview-pane{overflow:visible;padding:0;background:#fff;background-image:none}
   .pages{zoom:1 !important;width:auto;margin:0}
@@ -628,6 +705,11 @@ dialog#notesdlg::backdrop{background:rgba(43,32,14,.45);backdrop-filter:blur(2px
       <svg class="icon" viewBox="0 0 24 24"><path d="M20.4 14.6A8.6 8.6 0 0 1 9.4 3.6 8.9 8.9 0 1 0 20.4 14.6Z"/></svg>
     </button>
 
+    <button class="btn" id="btn-outline" aria-expanded="true" aria-controls="outline-pane" title="Show or hide the document outline">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M4 6h2M9 6h11M4 12h2M9 12h11M4 18h2M9 18h7"/></svg>
+      <span class="btn-label">Outline</span>
+    </button>
+
     <button class="btn" id="btn-design" aria-expanded="true" title="Show or hide design controls">
       <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
       <span class="btn-label">Design</span>
@@ -677,6 +759,23 @@ $$\vec{F}=m\vec{a}$$
 </header>
 
 <main>
+  <!-- ================= Outline ================= -->
+  <nav class="outline-pane" id="outline-pane" aria-label="Document outline">
+    <div class="outline-head">
+      <div class="outline-head-row">
+        <span class="outline-head-left">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2M9 6h11M4 12h2M9 12h11M4 18h2M9 18h7"/></svg>
+          <span class="outline-kicker">Outline</span>
+        </span>
+        <button type="button" class="btn small ghost icon-only outline-close" id="btn-close-outline" aria-label="Close outline" title="Close outline">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></svg>
+        </button>
+      </div>
+      <div class="outline-count" id="outline-count">No headings yet</div>
+    </div>
+    <div class="outline-list" id="outline-list"></div>
+  </nav>
+
   <!-- ================= Content ================= -->
   <section class="editor-pane" aria-label="Markdown editor">
     <div class="pane-head">
@@ -3066,6 +3165,278 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
     e.preventDefault();
     open();
   });
+})();
+
+/* ---------------- outline panel (left) ----------------
+   Lists the headings of the rendered sheet, grouped by the printed page they
+   end up on, so a long sheet can be navigated without hunting through columns.
+   Read-only: it observes #pages (which every render replaces) and never writes
+   into it except for a paint-only flash class on the heading you jump to. */
+(function editorOutline(){
+  const panel = $("#outline-pane"), list = $("#outline-list"), countEl = $("#outline-count");
+  const toggleBtn = $("#btn-outline"), closeBtn = $("#btn-close-outline");
+  const preview = $("#preview-pane"), pagesRoot = $("#pages");
+  if (!panel || !list || !countEl || !preview || !pagesRoot || !toggleBtn) return;
+
+  const LS_KEY = "cheatsheet-studio.outline";
+  const HEADINGS = "h1,h2,h3,h4,h5,h6";
+  const NARROW = "(max-width: 1180px)";
+  const reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  let items = [];        // [{ heading, level, text, page, btn }]
+  let signature = "";    // page|level|text per entry — lets a re-render remap instead of rebuild
+  let activeIdx = -1;
+  let buildTimer = null;
+  let lastSnap = "";
+  let pinned = null;     // { idx, until } — keeps a clicked entry current while its jump settles
+  let spyRaf = 0;
+  let flashTimer = null;
+  let flashEl = null;
+
+  const clean = t => (t || "").replace(/\s+/g, " ").trim();
+  const levelOf = h => Math.min(6, Math.max(1, parseInt(String(h.tagName).slice(1), 10) || 1));
+
+  /* A heading's textContent leaks rendered math (KaTeX ships MathML *and* an
+     HTML twin) and drops image alt text. Build the label from a throwaway clone
+     whose math becomes its TeX source and whose images become their alt text. */
+  function labelOf(h){
+    const simple = !h.querySelector(".katex, img, svg");
+    if (simple) return clean(h.textContent);
+    const clone = h.cloneNode(true);
+    clone.querySelectorAll(".katex").forEach(k => {
+      const tex = k.querySelector('annotation[encoding="application/x-tex"]');
+      k.replaceWith(document.createTextNode(tex ? tex.textContent : k.textContent));
+    });
+    clone.querySelectorAll("img").forEach(img => {
+      img.replaceWith(document.createTextNode(img.getAttribute("alt") || ""));
+    });
+    clone.querySelectorAll("svg").forEach(svg => svg.remove());
+    return clean(clone.textContent);
+  }
+
+  function scan(){
+    const out = [];
+    const pages = pagesRoot.querySelectorAll(".page");
+    for (let i = 0; i < pages.length; i++){
+      const heads = pages[i].querySelectorAll(HEADINGS);
+      for (let j = 0; j < heads.length; j++){
+        const text = labelOf(heads[j]);
+        if (!text) continue;
+        out.push({ heading: heads[j], level: levelOf(heads[j]), text: text, page: i + 1 });
+      }
+    }
+    return out;
+  }
+
+  function build(){
+    const scanned = scan();
+    const sig = scanned.map(e => e.page + "\u0002" + e.level + "\u0002" + e.text).join("\u0001");
+    /* Same headings on the same pages → pagination only replaced the nodes.
+       Re-point the entries instead of rebuilding, so typing in the editor does
+       not make the panel flicker or lose its scroll position. */
+    if (sig === signature && scanned.length === items.length){
+      for (let i = 0; i < scanned.length; i++) items[i].heading = scanned[i].heading;
+      spy();
+      return;
+    }
+    signature = sig;
+    items = scanned;
+    activeIdx = -1;
+    pinned = null;
+    const keepScroll = list.scrollTop;
+    list.innerHTML = "";
+    if (!items.length){
+      const broken = !!pagesRoot.querySelector(".fatal-error");
+      const empty = document.createElement("div");
+      empty.className = "outline-empty";
+      empty.textContent = broken
+        ? "The preview could not be rendered, so there is no outline yet."
+        : "No headings yet — start a line with # to build an outline.";
+      list.appendChild(empty);
+      countEl.textContent = broken ? "Preview unavailable" : "No headings yet";
+      return;
+    }
+    let wrap = null, currentPage = -1, pageCount = 0;
+    const parentPage = [];          // deepest parent page per level, to spot continuations
+    for (const entry of items){
+      /* a sub-heading whose *section* began on an earlier page (the document
+         title h1 spans every page, so only level 3 and deeper count) */
+      let parentLvl = entry.level - 1;
+      while (parentLvl >= 2 && parentPage[parentLvl] === undefined) parentLvl--;
+      const continuesSection = entry.level >= 3 && parentLvl >= 2 &&
+                               parentPage[parentLvl] !== undefined &&
+                               parentPage[parentLvl] !== entry.page;
+      if (entry.page !== currentPage){
+        currentPage = entry.page;
+        pageCount++;
+        wrap = document.createElement("div");
+        wrap.className = "outline-page";
+        const label = document.createElement("div");
+        label.className = "outline-page-label";
+        label.textContent = "Page " + entry.page;
+        wrap.appendChild(label);
+        list.appendChild(wrap);
+      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "outline-item lvl-" + entry.level + (continuesSection ? " cont" : "");
+      btn.textContent = entry.text;
+      /* headings can be long (or, in a malformed document, swallow whole
+         paragraphs) — keep the tooltip readable */
+      btn.title = "Page " + entry.page + " · " +
+                  (entry.text.length > 140 ? entry.text.slice(0, 140) + "…" : entry.text);
+      btn.addEventListener("click", () => goTo(entry));
+      wrap.appendChild(btn);
+      entry.btn = btn;
+      parentPage[entry.level] = entry.page;
+      for (let deeper = entry.level + 1; deeper <= 6; deeper++) parentPage[deeper] = undefined;
+    }
+    countEl.textContent = items.length + (items.length === 1 ? " heading" : " headings") +
+                          " · " + pageCount + (pageCount === 1 ? " page" : " pages");
+    list.scrollTop = keepScroll;
+    spy();
+  }
+
+  function markActive(idx, reveal){
+    if (idx < -1) idx = -1;
+    if (idx >= items.length) idx = items.length - 1;
+    if (idx === activeIdx){
+      if (reveal && idx >= 0) revealItem(idx);
+      return;
+    }
+    const prev = activeIdx >= 0 ? items[activeIdx] : null;
+    if (prev && prev.btn){ prev.btn.classList.remove("current"); prev.btn.removeAttribute("aria-current"); }
+    activeIdx = idx;
+    const cur = idx >= 0 ? items[idx] : null;
+    if (cur && cur.btn){ cur.btn.classList.add("current"); cur.btn.setAttribute("aria-current", "true"); }
+    if (reveal && cur) revealItem(idx);
+  }
+
+  /* scroll the entry into view inside the list only (never the page) */
+  function revealItem(idx){
+    const btn = items[idx] && items[idx].btn;
+    if (!btn) return;
+    const box = list.getBoundingClientRect(), r = btn.getBoundingClientRect();
+    if (r.top < box.top + 4) list.scrollTop += r.top - box.top - 4;
+    else if (r.bottom > box.bottom - 4) list.scrollTop += r.bottom - box.bottom + 4;
+  }
+
+  function spy(){
+    spyRaf = 0;
+    if (!items.length){ markActive(-1, false); return; }
+    /* Right after a click the smooth scroll sweeps past other headings (and a
+       multi-column sheet can show several headings on one line), so keep the
+       entry that was clicked until the jump has settled or the user scrolls. */
+    if (pinned){
+      if (Date.now() < pinned.until){ markActive(pinned.idx, false); return; }
+      pinned = null;
+    }
+    const box = preview.getBoundingClientRect();
+    const limit = box.top + 16;
+    /* The sheet is multi-column, so DOM order is column-major and *not* the
+       same as top-to-bottom order. Look at every heading and keep the one that
+       sits closest to (but above) the reading line; ties keep the earliest in
+       document order, i.e. the left-most column. */
+    let idx = -1, bestTop = -Infinity;
+    for (let i = 0; i < items.length; i++){
+      const h = items[i].heading;
+      if (!h || !h.isConnected) continue;
+      const top = h.getBoundingClientRect().top;
+      if (top <= limit && top > bestTop + 1){ idx = i; bestTop = top; }
+    }
+    if (idx < 0) idx = 0;                                   // nothing above the fold yet → first heading
+    if (preview.scrollTop + preview.clientHeight >= preview.scrollHeight - 4) idx = items.length - 1;
+    markActive(idx, true);
+  }
+  function queueSpy(){ if (!spyRaf) spyRaf = requestAnimationFrame(spy); }
+
+  function flash(h){
+    if (reduceMotion) return;             // honour the OS "reduce motion" setting
+    try {
+      if (flashEl && flashEl !== h) flashEl.classList.remove("outline-flash");
+      h.classList.remove("outline-flash");
+      void h.offsetWidth;                    // restart the animation
+      h.classList.add("outline-flash");
+      flashEl = h;
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => {
+        try { h.classList.remove("outline-flash"); } catch(_){}
+        if (flashEl === h) flashEl = null;
+      }, 1100);
+    } catch(_){}
+  }
+
+  function goTo(entry){
+    const h = entry.heading;
+    if (!h || !h.isConnected){
+      /* a render landed between the click and the jump — rebuild, then follow
+         the same heading (matched by text, then by page) if it still exists */
+      build();
+      const same = items.find(e => e.text === entry.text && e.page === entry.page) ||
+                   items.find(e => e.text === entry.text);
+      if (same) goTo(same);
+      return;
+    }
+    const box = preview.getBoundingClientRect();
+    const r = h.getBoundingClientRect();
+    const top = Math.max(0, preview.scrollTop + (r.top - box.top) - 12);
+    try {
+      if (preview.scrollTo) preview.scrollTo({ top: top, behavior: reduceMotion ? "auto" : "smooth" });
+      else preview.scrollTop = top;
+    } catch(_) { preview.scrollTop = top; }
+    flash(h);
+    const idx = items.indexOf(entry);
+    markActive(idx, false);
+    pinned = { idx: Math.max(0, idx), until: Date.now() + 950 };
+    queueSpy();
+  }
+
+  function setOpen(open, persist = true, repaginate = true){
+    document.body.classList.toggle("outline-closed", !open);
+    toggleBtn.setAttribute("aria-expanded", String(!!open));
+    try { panel.inert = !open; } catch(_){}
+    if (persist) lsSet(LS_KEY, open ? "open" : "closed");
+    if (repaginate !== false){
+      requestAnimationFrame(() => { try { syncHeaderHeight(); applyCSSVars(); queueRepaginate(); } catch(_){} });
+    }
+  }
+
+  toggleBtn.addEventListener("click", () => setOpen(document.body.classList.contains("outline-closed")));
+  if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false));
+  preview.addEventListener("scroll", () => {
+    if (pinned && Date.now() < pinned.until) return;   // the jump itself is still settling
+    pinned = null;
+    queueSpy();
+  }, { passive: true });
+  /* any real gesture means the user is steering again — hand control back */
+  ["wheel", "touchstart", "pointerdown", "keydown"].forEach(ev => {
+    preview.addEventListener(ev, () => { pinned = null; queueSpy(); }, { passive: true });
+  });
+  window.addEventListener("resize", queueSpy);
+
+  /* Every render replaces #pages. Pagination can take a while on long sheets,
+     so rebuild only once the page/heading counts stop changing — a fixed delay
+     would happily snapshot a half-paginated document. */
+  function scheduleBuild(){
+    if (buildTimer) return;
+    const tick = () => {
+      const snap = pagesRoot.querySelectorAll(".page").length + ":" + pagesRoot.querySelectorAll(HEADINGS).length;
+      if (snap === lastSnap){ buildTimer = null; build(); return; }
+      lastSnap = snap;
+      buildTimer = setTimeout(tick, 140);
+    };
+    buildTimer = setTimeout(tick, 140);
+  }
+  if (typeof MutationObserver === "function"){
+    try { new MutationObserver(scheduleBuild).observe(pagesRoot, { childList: true, subtree: true }); } catch(_){}
+  }
+
+  build();                                    // empty state before the first render
+  let pref = null;
+  try { pref = lsGet(LS_KEY); } catch(_){}
+  const narrow = !!(window.matchMedia && window.matchMedia(NARROW).matches);
+  setOpen(pref === "open" ? true : (pref === "closed" ? false : !narrow), false, false);
+  scheduleBuild();
 })();
 </script>
 </body>
