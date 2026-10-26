@@ -3345,7 +3345,12 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
       if (top <= limit && top > bestTop + 1){ idx = i; bestTop = top; }
     }
     if (idx < 0) idx = 0;                                   // nothing above the fold yet → first heading
-    if (preview.scrollTop + preview.clientHeight >= preview.scrollHeight - 4) idx = items.length - 1;
+    /* At the very bottom the last heading can never reach the reading line, so
+       force it — but only when the sheet actually scrolls. A sheet short enough
+       to fit on one screen is already at the "bottom" from the start, and there
+       the top of the document is the first heading, not the last. */
+    const scrollable = preview.scrollHeight > preview.clientHeight + 4;
+    if (scrollable && preview.scrollTop + preview.clientHeight >= preview.scrollHeight - 4) idx = items.length - 1;
     markActive(idx, true);
   }
   function queueSpy(){ if (!spyRaf) spyRaf = requestAnimationFrame(spy); }
