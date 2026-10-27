@@ -198,11 +198,15 @@ body.design-closed .inspector{display:none}
 #editor::placeholder{color:#c4b294}
 .editor-footer{
   min-height:34px;padding:6px 12px;border-top:1px solid var(--line);background:var(--panel-2);
-  display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px;
+  display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:11px;
 }
+/* 11 px text needs 4.5:1 — --muted only reached 3.8:1 on this panel */
+.editor-footer #save-state,.editor-footer .editor-meta{color:var(--ink-2)}
 .editor-footer .dot{width:6px;height:6px;border-radius:50%;background:#3c8c5a;flex:0 0 auto}
 .editor-footer .dot.bad{background:#c0392b}
 .editor-footer #save-state.bad{color:#a3281c;font-weight:650}
+.editor-footer .net-pill{flex:0 0 auto;font-size:11px;font-weight:650;letter-spacing:.02em;color:#6b4a12;
+  background:#f6e6bf;border:1px solid #e3c98d;border-radius:999px;padding:2px 8px;white-space:nowrap}
 .editor-footer .editor-meta{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
 body.dragging .editor-pane::after{
   content:"Drop to add";position:absolute;inset:52px 12px 44px;border:1.5px dashed var(--accent);
@@ -911,6 +915,7 @@ $$\vec{F}=m\vec{a}$$
     <div class="editor-footer">
       <span class="dot" id="save-dot" aria-hidden="true"></span>
       <span id="save-state" role="status">Saved in this browser · Paste or drop images &amp; .md files</span>
+      <span id="net-state" class="net-pill" hidden>Offline — everything still works</span>
       <span class="editor-meta" id="editor-meta">0 lines</span>
     </div>
   </section>
@@ -1265,10 +1270,30 @@ function lsSet(key, value, warnOnFailure = false){
     return false;
   }
 }
+/* The mirror used to be one bare string for the whole app, so a second tab
+   sitting on a different note looked "newer" and bled its text across. It now
+   carries the id of the note it belongs to; a plain string from an older build
+   is still read (and rewritten in the new shape on first save). */
+const MIRROR_V = 1;
+function writeMirror(text){
+  const payload = JSON.stringify({ v: MIRROR_V, id: (curNote && curNote.id) || "", text: String(text == null ? "" : text) });
+  return lsSet(LS_CONTENT, payload, true);
+}
+function readMirror(){
+  const raw = lsGet(LS_CONTENT);
+  if (raw === null) return null;
+  if (raw.charAt(0) === "{"){
+    try {
+      const o = JSON.parse(raw);
+      if (o && o.v === MIRROR_V && typeof o.text === "string") return { id: typeof o.id === "string" ? o.id : "", text: o.text, legacy: false };
+    } catch(_){}
+  }
+  return { id: "", text: raw, legacy: true };   // pre-envelope mirror: belongs to whatever note is open
+}
 function saveContent(){
-  const ok = lsSet(LS_CONTENT, editor.value, true); // immediate mirror — a refresh can never lose typed work
+  const ok = writeMirror(editor.value);   // immediate mirror — a refresh can never lose typed work
   if (ok) lastWrittenValue = editor.value;
-  scheduleNotesSave();                              // the notes library write is throttled + flushed on hide
+  scheduleNotesSave();                    // the notes library write is throttled + flushed on hide
   return ok;
 }
 
@@ -1296,9 +1321,8 @@ function deriveTitle(text){
 function makeNote(title, content){
   return { id: uid("n"), title: String(title || "Untitled note").slice(0, 120), content: String(content || ""), created: Date.now(), updated: Date.now() };
 }
-function loadNotesStore(){
+function parseNotesStore(raw){
   try {
-    const raw = lsGet(LS_NOTES);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.notes)) return null;
@@ -1317,10 +1341,48 @@ function loadNotesStore(){
     return { v: 1, current, notes };
   } catch(e){ return null; }
 }
+function loadNotesStore(){ return parseNotesStore(lsGet(LS_NOTES)); }
+
+/* Fold another tab's library into ours instead of replacing it. Notes that only
+   exist over there are kept (so saving here cannot delete them) and, for notes
+   this tab is not editing, the newer copy wins. The object for the note that is
+   open here is mutated in place, so `curNote` and the editor stay in sync. */
+function mergeNotesStore(local, remote){
+  if (!local) return remote;
+  if (!remote) return local;
+  const byId = new Map(local.notes.map(n => [n.id, n]));
+  remote.notes.forEach(r => {
+    const mine = byId.get(r.id);
+    if (!mine){ local.notes.push(r); byId.set(r.id, r); return; }
+    const editingHere = curNote && r.id === curNote.id;
+    if (!editingHere && (r.updated || 0) > (mine.updated || 0)) Object.assign(mine, r);
+  });
+  if (!local.notes.length) return local;
+  if (!local.notes.some(n => n.id === local.current)) local.current = local.notes[0].id;
+  return local;
+}
+let lastNotesRaw = null;      // what we last read or wrote, to spot a foreign write
 function saveNotesStore(){
   if (!NOTES_STORE) return;
+  const editingId = curNote && curNote.id;
   if (curNote) { curNote.content = editor.value; curNote.updated = Date.now(); }
-  lsSet(LS_NOTES, JSON.stringify(NOTES_STORE), true);
+  /* another tab may have written while this one was typing: merge before writing,
+     so a save can never drop a note that only exists in the other tab */
+  const disk = lsGet(LS_NOTES);
+  if (disk && disk !== lastNotesRaw){
+    const remote = parseNotesStore(disk);
+    if (remote){
+      NOTES_STORE = mergeNotesStore(NOTES_STORE, remote);
+      /* stay on the note being edited, not whatever the other tab had open */
+      curNote = NOTES_STORE.notes.find(n => n.id === editingId) ||
+                NOTES_STORE.notes.find(n => n.id === NOTES_STORE.current) || curNote;
+      if (curNote) NOTES_STORE.current = curNote.id;
+      HIST_STORE = pruneHistory(HIST_STORE, NOTES_STORE);
+    }
+  }
+  const out = JSON.stringify(NOTES_STORE);
+  if (out === lastNotesRaw) return;
+  if (lsSet(LS_NOTES, out, true)) lastNotesRaw = out;
 }
 function scheduleNotesSave(){
   if (notesSaveTimer) return;
@@ -1332,18 +1394,20 @@ function flushNotesSave(){
 }
 function initNotes(){
   NOTES_STORE = loadNotesStore();
-  const mirror = lsGet(LS_CONTENT);         // immediate mirror is the freshest copy of the open note
+  lastNotesRaw = lsGet(LS_NOTES);
+  const mirror = readMirror();              // immediate mirror is the freshest copy of the open note
   if (!NOTES_STORE){
-    let content = mirror;
-    if (content === null) content = SAMPLE; // first ever run
-    const note = makeNote(deriveTitle(content), content);
+    const note = makeNote(deriveTitle(mirror ? mirror.text : SAMPLE), mirror ? mirror.text : SAMPLE);
     NOTES_STORE = { v: 1, current: note.id, notes: [note] };
   }
   curNote = NOTES_STORE.notes.find(n => n.id === NOTES_STORE.current) || NOTES_STORE.notes[0];
   NOTES_STORE.current = curNote.id;
-  if (mirror !== null && mirror !== curNote.content){ curNote.content = mirror; curNote.updated = Date.now(); }
+  /* only trust the mirror for the note it says it belongs to (a legacy bare
+     string belongs to whichever note is open) */
+  const mirrorFits = !!mirror && (mirror.legacy || !mirror.id || mirror.id === curNote.id);
+  if (mirrorFits && mirror.text !== curNote.content){ curNote.content = mirror.text; curNote.updated = Date.now(); }
   editor.value = curNote.content;
-  lsSet(LS_CONTENT, curNote.content, true); // (re)establish the mirror
+  writeMirror(curNote.content);            // (re)establish the mirror for *this* note
   saveNotesStore();
   const titleEl = $("#note-title"); if (titleEl) titleEl.value = curNote.title;
 }
@@ -1354,7 +1418,7 @@ function switchToNote(id){
   curNote = note; NOTES_STORE.current = note.id;
   editor.value = note.content; committedBase = note.content;
   const titleEl = $("#note-title"); if (titleEl) titleEl.value = note.title;
-  lsSet(LS_CONTENT, note.content, true); saveNotesStore();
+  writeMirror(note.content); saveNotesStore();
   updateHistUI(); renderNow().catch(reportRenderError);
 }
 function createNote(){
@@ -1364,7 +1428,7 @@ function createNote(){
   curNote = note; NOTES_STORE.current = note.id;
   editor.value = ""; committedBase = "";
   const titleEl = $("#note-title"); if (titleEl) titleEl.value = note.title;
-  lsSet(LS_CONTENT, "", true); saveNotesStore();
+  writeMirror(""); saveNotesStore();
   updateHistUI(); renderNow().catch(reportRenderError);
   return note;
 }
@@ -1405,7 +1469,16 @@ function loadHistoryStore(){
   } catch(e){ return {}; }
 }
 function histFor(id){ if (!HIST_STORE[id]) HIST_STORE[id] = { undo: [], redo: [] }; return HIST_STORE[id]; }
+/* Undo history for notes that no longer exist is dead weight — it used to be
+   written back on every save, so deleting notes quietly filled the quota. */
+function pruneHistory(store, notes){
+  const alive = new Set(((notes && notes.notes) || []).map(n => n.id));
+  Object.keys(store).forEach(id => { if (!alive.has(id)) delete store[id]; });
+  return store;
+}
+let lastHistRaw = null;      // skip the write (and its quota churn) when nothing changed
 function persistHistory(){
+  if (NOTES_STORE) pruneHistory(HIST_STORE, NOTES_STORE);
   const build = () => JSON.stringify({ v: 1, notes: HIST_STORE });
   let raw = build(), guard = 0;
   // Undo history must never be the thing that fills the quota: trim oldest
@@ -1419,7 +1492,9 @@ function persistHistory(){
     target.shift();
     raw = build();
   }
-  if (!lsSet(LS_HISTORY, raw, false)) console.warn("G/note.: undo history kept in memory only (storage full).");
+  if (raw === lastHistRaw) return;
+  if (lsSet(LS_HISTORY, raw, false)) lastHistRaw = raw;
+  else console.warn("G/note.: undo history kept in memory only (storage full).");
 }
 function updateHistUI(){
   const h = curNote ? histFor(curNote.id) : { undo: [], redo: [] };
@@ -1549,8 +1624,52 @@ function makeImgId(){
   do { id = "i" + Math.random().toString(36).slice(2, 10); } while (IMG_MAP.has(id));
   return id;
 }
+/* Embedded photos are held in memory so a render can resolve `gnote-img:` tags.
+   Keeping every photo of a long session there is a slow leak — and the PDF path
+   holds a second copy while it rasterises — so the cache is capped and anything
+   evicted is simply read back from IndexedDB when a note needs it. */
+const IMG_MEM_MAX = 48e6;                 // ~48 M characters of base64
+function imgIdsIn(text){
+  const out = [];
+  if (typeof text !== "string" || text.indexOf("gnote-img:") < 0) return out;
+  text.replace(IMAGE_REF, (m, pre, id) => { out.push(id); return m; });
+  return out;
+}
+function imgMemTrim(keep){
+  let total = 0;
+  IMG_MAP.forEach(v => { total += (v || "").length; });
+  if (total <= IMG_MEM_MAX) return;
+  for (const id of [...IMG_MAP.keys()]){
+    if (total <= IMG_MEM_MAX) break;
+    if (keep && keep.has(id)) continue;
+    const v = IMG_MAP.get(id) || "";
+    IMG_MAP.delete(id);
+    total -= v.length;
+  }
+}
+function imgIdbGet(db, id){
+  return new Promise((resolve, reject) => {
+    try {
+      const rq = db.transaction("images", "readonly").objectStore("images").get(id);
+      rq.onsuccess = () => resolve(rq.result && rq.result.data);
+      rq.onerror = () => reject(rq.error);
+    } catch(e){ reject(e); }
+  });
+}
+/* Load just the images this note references; nothing else is paged back in. */
+async function imgEnsure(ids){
+  const missing = ids.filter(id => !IMG_MAP.has(id));
+  if (!missing.length) return;
+  if (imgBackend === "idb" && imgDb){
+    for (const id of missing){
+      try { const d = await imgIdbGet(imgDb, id); if (typeof d === "string") IMG_MAP.set(id, d); } catch(_){}
+    }
+  }
+  imgMemTrim(new Set(ids));
+}
 async function imgPut(id, data){
   IMG_MAP.set(id, data);
+  imgMemTrim(new Set(imgIdsIn(editor.value)));
   if (imgBackend === "idb" && imgDb){
     try { await imgIdbPut(imgDb, id, data); return true; }
     catch(e){ imgDb = null; imgBackend = "ls"; }
@@ -2660,6 +2779,7 @@ let renderSequence = 0;
 async function renderNow(){
   const mySequence = ++renderSequence;
   await IMG_READY;   // embedded-image tags resolve against the loaded browser store
+  await imgEnsure(imgIdsIn(editor.value));   // page back in only what this note uses
   if (mySequence !== renderSequence) return false;
   const myErrors = [];
   const root = renderMarkdown(editor.value || "", myErrors);
@@ -2757,12 +2877,26 @@ function reportRenderError(error){
   showFatalError(error);
   try { toast("Render error: " + (error && error.message ? error.message : error)); } catch(_){}
 }
+/* A 3,000-heading sheet takes seconds to paginate; re-running that after every
+   pause turned typing into a slideshow. The debounce now follows the measured
+   cost of the last render: the heavier the sheet, the longer the preview waits
+   for a real pause. Small sheets keep the snappy 220 ms. */
+let renderCostMs = 0;
+function renderDelay(){
+  if (renderCostMs > 2500) return 1400;
+  if (renderCostMs > 1200) return 900;
+  if (renderCostMs > 600) return 450;
+  return 220;
+}
 function queueRender(){
   clearTimeout(debounce);
   debounce = setTimeout(async () => {
     debounce = null;
+    const t0 = (performance && performance.now) ? performance.now() : Date.now();
     try { await renderNow(); } catch(e) { reportRenderError(e); }
-  }, 220);
+    const cost = ((performance && performance.now) ? performance.now() : Date.now()) - t0;
+    renderCostMs = Math.round(cost);
+  }, renderDelay());
 }
 async function flushRender(){
   if (debounce){ clearTimeout(debounce); debounce = null; }
@@ -2882,8 +3016,10 @@ async function handleImageFile(file){
   if (!file) return;
   if (!file.type || !file.type.startsWith("image/")){ toast("That file is not an image."); return; }
   try {
-    const url = await fileToDataURL(file);
+    askPersistentStorage();
+    let url = await fileToDataURL(file);
     if (typeof url !== "string" || !url.startsWith("data:")) throw new Error("The browser did not return image data.");
+    url = await fitImageData(url, file.type || "");
     const alt = (file.name || "image").replace(/\.[^.]+$/,"").replace(/[\[\]]/g,"");
     await IMG_READY;
     const id = makeImgId();
@@ -2900,6 +3036,58 @@ async function handleImageFile(file){
     console.error(e);
     toast("Could not embed that image: " + (e.message || e));
   }
+}
+/* Two storage guards for photos on a phone:
+   - ask the browser to keep this origin's data (Safari otherwise evicts it after
+     a week of not being used, and any browser may evict under pressure);
+   - if the photo would not fit in the space that is actually left, scale it down
+     on a canvas before storing it, rather than discovering the quota mid-write. */
+let persistAsked = false;
+function askPersistentStorage(){
+  if (persistAsked) return;
+  persistAsked = true;
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch(_){}
+}
+async function storageHeadroom(){
+  try {
+    if (!navigator.storage || !navigator.storage.estimate) return Infinity;
+    const est = await navigator.storage.estimate();
+    if (!est || !est.quota) return Infinity;
+    return Math.max(0, est.quota - (est.usage || 0));
+  } catch(_) { return Infinity; }
+}
+function loadImageEl(url){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("could not decode that image"));
+    img.src = url;
+  });
+}
+async function fitImageData(url, type){
+  const head = await storageHeadroom();
+  if (!isFinite(head) || url.length * 2.2 <= head) return url;   // fits comfortably
+  try {
+    const img = await loadImageEl(url);
+    const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
+    if (!w0 || !h0) return url;
+    const png = /^image\/png/i.test(type || "");
+    let maxSide = 1600;
+    for (let attempt = 0; attempt < 3; attempt++){
+      const k = Math.min(1, maxSide / Math.max(w0, h0));
+      const w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      const cx = cv.getContext("2d");
+      cx.imageSmoothingQuality = "high";
+      if (!png){ cx.fillStyle = "#ffffff"; cx.fillRect(0, 0, w, h); }
+      cx.drawImage(img, 0, 0, w, h);
+      const out = png ? cv.toDataURL("image/png") : cv.toDataURL("image/jpeg", 0.85);
+      if (!isFinite(head) || out.length * 2.2 <= head) return out;
+      maxSide = Math.round(maxSide * 0.7);
+    }
+    return url;   // nothing helped; the caller still has the fallbacks
+  } catch(_) { return url; }
 }
 function isTextLikeFile(file){
   if (!file) return false;
@@ -3177,7 +3365,7 @@ async function buildPdfBlob(){
      phones and tablets get a lower ceiling, and the pixel budget is capped so a
      huge paper size can never allocate a canvas the browser refuses. */
   const coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
-  let scale = pages.length <= 2 ? 3 : pages.length <= 6 ? 2.25 : 1.75;
+  let scale = pages.length <= 2 ? 3 : pages.length <= 6 ? 2.25 : pages.length <= 20 ? 1.75 : 1.5;
   if (coarse) scale = Math.min(scale, 2);
   const first = pages[0];
   if (first){
@@ -3408,26 +3596,122 @@ IMG_READY.then(async () => {
    keystroke, an undo step or the note library. */
 function flushEverything(){
   commitPendingEdit(); persistHistory(); flushNotesSave();
-  lsSet(LS_CONTENT, editor.value, false);
+  const payload = JSON.stringify({ v: MIRROR_V, id: (curNote && curNote.id) || "", text: editor.value });
+  lsSet(LS_CONTENT, payload, false);
 }
+/* pagehide fires for a close, a reload and a bfcache freeze — including on iOS,
+   where beforeunload does not. Registering beforeunload as well only cost us the
+   back/forward cache, so it is gone. */
 window.addEventListener("pagehide", flushEverything);
-window.addEventListener("beforeunload", flushEverything);
 /* Two tabs used to fight silently: whichever one saved last won, and closing a
    stale tab could overwrite newer work. Now the tab with nothing unsaved adopts
    what the other one wrote, and a tab with unsaved edits is warned instead of
    being clobbered without a word. */
 lastWrittenValue = editor.value;
-window.addEventListener("storage", e => {
-  if (e.key !== LS_CONTENT || e.newValue === null) return;
-  if (e.newValue === editor.value || e.newValue === lastWrittenValue) return;
+/* Two tabs must never overwrite each other's *notes*.
+   - A mirror write belongs to a note id: if it is not the note open here, it is
+     ignored. (It used to be a bare string, so tab A showed and then saved tab
+     B's different note over its own.)
+   - A library write is merged when this tab is clean (adopt) or dirty (fold the
+     other tab's notes in and keep typing), never written back blindly. */
+function onForeignMirror(newValue){
+  const parsed = (() => {
+    try { const o = JSON.parse(newValue); if (o && o.v === MIRROR_V && typeof o.text === "string") return o; } catch(_){}
+    return { id: "", text: newValue };
+  })();
+  if (parsed.id && curNote && parsed.id !== curNote.id) return;   // another note's text
+  if (parsed.text === editor.value || parsed.text === lastWrittenValue) return;
   if (editor.value === lastWrittenValue){
-    editor.value = e.newValue;
-    committedBase = e.newValue;
-    lastWrittenValue = e.newValue;
+    editor.value = parsed.text;
+    committedBase = parsed.text;
+    lastWrittenValue = parsed.text;
     queueRender();
     try { toast("This note was updated in another tab."); } catch(_){}
   } else {
     try { toast("Another tab changed this note — your unsaved edits here will overwrite it."); } catch(_){}
+  }
+}
+function onForeignNotes(newValue){
+  const remote = parseNotesStore(newValue);
+  if (!remote) return;
+  lastNotesRaw = newValue;
+  const clean = editor.value === lastWrittenValue;
+  const mineId = curNote && curNote.id;
+  if (clean){
+    /* Nothing unsaved here, so take the other tab's library — but stay on the
+       note this tab is reading unless that note is gone. Jumping to a different
+       note just because another tab opened one is jarring, and it is how the
+       old code let one note's text land in another note's page. */
+    const remoteMine = mineId ? remote.notes.find(n => n.id === mineId) : null;
+    NOTES_STORE = remote;
+    pruneHistory(HIST_STORE, NOTES_STORE);
+    let msg = "";
+    if (remoteMine){
+      curNote = remoteMine;
+      NOTES_STORE.current = remoteMine.id;
+      if (remoteMine.content !== editor.value){
+        editor.value = remoteMine.content;
+        committedBase = remoteMine.content;
+        lastWrittenValue = remoteMine.content;
+        queueRender();
+        msg = "This note was updated in another tab.";
+      }
+    } else {
+      curNote = NOTES_STORE.notes.find(n => n.id === NOTES_STORE.current) || NOTES_STORE.notes[0];
+      NOTES_STORE.current = curNote.id;
+      editor.value = curNote.content;
+      committedBase = curNote.content;
+      lastWrittenValue = curNote.content;
+      queueRender();
+      msg = "That note was deleted in another tab — showing \"" + curNote.title + "\".";
+    }
+    const titleEl = $("#note-title"); if (titleEl) titleEl.value = curNote.title;
+    writeMirror(curNote.content);
+    updateHistUI(); renderNotesList();
+    if (msg){ try { toast(msg); } catch(_){} }
+  } else {
+    // keep typing, but do not lose the other tab's notes
+    NOTES_STORE = mergeNotesStore(NOTES_STORE, remote);
+    curNote = NOTES_STORE.notes.find(n => n.id === (curNote && curNote.id)) || curNote;
+    renderNotesList();
+    try { toast("Another tab changed your notes — both sets kept."); } catch(_){}
+  }
+}
+window.addEventListener("storage", e => {
+  if (e.newValue === null) return;
+  if (e.key === LS_CONTENT) return onForeignMirror(e.newValue);
+  if (e.key === LS_NOTES) return onForeignNotes(e.newValue);
+  if (e.key === LS_HISTORY){
+    try {
+      const parsed = JSON.parse(e.newValue);
+      if (parsed && parsed.notes && typeof parsed.notes === "object" && editor.value !== lastWrittenValue){
+        HIST_STORE = loadHistoryStore(); updateHistUI();   // adopt theirs, no merge fight over undo steps
+      }
+    } catch(_){}
+  }
+});
+/* No connection is a normal state here: every asset is local and the service
+   worker keeps them. Say so plainly instead of letting people wonder whether
+   their work is still going anywhere. */
+function setNetState(){
+  const el = document.getElementById("net-state");
+  if (!el) return;
+  const offline = navigator.onLine === false;
+  el.hidden = !offline;
+  document.documentElement.classList.toggle("is-offline", offline);
+}
+window.addEventListener("online", () => { setNetState(); try { toast("Back online."); } catch(_){} });
+window.addEventListener("offline", () => { setNetState(); try { toast("No connection — editing and Export still work."); } catch(_){} });
+try { setNetState(); } catch(_){}
+
+/* A back/forward cache restore brings the page back without re-reading storage. */
+window.addEventListener("pageshow", e => {
+  if (!e.persisted) return;
+  const disk = lsGet(LS_NOTES);
+  if (disk && disk !== lastNotesRaw) onForeignNotes(disk);
+  const mirror = readMirror();
+  if (mirror && !mirror.legacy && mirror.id === (curNote && curNote.id) && mirror.text !== editor.value && editor.value === lastWrittenValue){
+    editor.value = mirror.text; lastWrittenValue = mirror.text; committedBase = mirror.text; queueRender();
   }
 });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushEverything(); });
