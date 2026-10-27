@@ -59,14 +59,23 @@ const FONTS = [
 ];
 const NAV_TIMEOUT = 3500;      // slow network still gets a cached shell quickly
 
+// `cache: "reload"` matters: a plain add() can store a copy the browser had
+// already cached from the *previous* build, which would then be served as the
+// offline shell for a whole cycle. One retry covers a flaky mobile connection.
+function precache(cache, url, tries = 2){
+  const one = () => cache.add(new Request(url, { cache: "reload" })).catch(() => {});
+  let p = one();
+  for (let i = 1; i < tries; i++) p = p.then(() => cache.match(url)).then(hit => hit ? undefined : one());
+  return p;
+}
 self.addEventListener("install", event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
     // one failure must not abort the whole install
-    await Promise.all(CORE.map(url => cache.add(url).catch(() => {})));
+    await Promise.all(CORE.map(url => precache(cache, url)));
     self.skipWaiting();
     // fonts are ~1.5 MB: fill them in afterwards, without holding up activation
-    Promise.all(FONTS.map(url => cache.add(url).catch(() => {}))).catch(() => {});
+    Promise.all(FONTS.map(url => precache(cache, url))).catch(() => {});
   })());
 });
 
@@ -88,7 +97,7 @@ async function networkFirst(request){
       fetch(request),
       new Promise((_, reject) => setTimeout(() => reject(new Error("slow")), NAV_TIMEOUT)),
     ]);
-    if (response && response.ok) cache.put(request, response.clone()).catch(() => {});
+    if (response && response.ok && response.status === 200 && response.type !== "opaque") cache.put(request, response.clone()).catch(() => {});
     return response;
   } catch (_) {
     if (cached) return cached;
@@ -116,6 +125,7 @@ async function cacheFirst(request){
 self.addEventListener("fetch", event => {
   const request = event.request;
   if (request.method !== "GET") return;
+  if (request.headers.get("range")) return;      // let the browser stream media itself
   const url = new URL(request.url);
   /* never serve the worker script from its own cache — updates must land */
   if (url.pathname.endsWith("/sw.js")) return;
