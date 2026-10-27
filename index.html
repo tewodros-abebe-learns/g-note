@@ -1111,6 +1111,10 @@ $$\vec{F}=m\vec{a}$$
   <section class="preview-pane" id="preview-pane" aria-label="Rendered sheet preview">
     <div class="preview-toolbar">
       <span class="spacer"></span>
+      <button class="btn" id="btn-share" title="Send this sheet to someone as a link">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m8 7 4-3 4 3"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
+        <span class="btn-label">Share</span>
+      </button>
       <button class="btn primary" id="btn-print" title="Open print dialog to save as PDF">
         <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>
         <span class="btn-label">Export</span>
@@ -2851,6 +2855,134 @@ $("#btn-print").addEventListener("click", async () => {
   }
 });
 window.addEventListener("afterprint", () => { document.title = APP_TITLE; });
+
+/* ---------------- Share ----------------
+   Export hands the sheet to the browser's print dialog, which owns the PDF — so
+   there is no PDF file here to attach. Share therefore sends a link that carries
+   the sheet itself (text + the design settings you are looking at) and rebuilds
+   it on any device; your friend gets the identical sheet and one Export tap
+   gives them the PDF. Images can't travel inside a URL, so those are refused
+   with a hint to send the PDF instead. */
+const SHARE_HASH = "sheet";
+const SHARE_URL_LIMIT = 12000;      // chat apps and mail clients truncate longer links
+function b64urlEncode(bytes){
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000){
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlDecode(str){
+  const padded = str.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(padded + "=".repeat((4 - padded.length % 4) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function packSheet(payload){
+  const json = JSON.stringify(payload);
+  if (typeof CompressionStream === "function"){
+    try {
+      const packed = new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+      return "1" + b64urlEncode(new Uint8Array(await new Response(packed).arrayBuffer()));
+    } catch(_){ /* fall through to plain base64 */ }
+  }
+  return "0" + b64urlEncode(new TextEncoder().encode(json));
+}
+async function unpackSheet(data){
+  const deflated = data.charAt(0) === "1";
+  const bytes = b64urlDecode(data.slice(1));
+  if (!deflated) return JSON.parse(new TextDecoder().decode(bytes));
+  const plain = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return JSON.parse(await new Response(plain).text());
+}
+/* Everything that shapes the printed page — but not this browser's UI theme or
+   zoom, which stay the reader's own. */
+function shareableSettings(){
+  const out = {};
+  try {
+    Object.keys(S).forEach(k => {
+      if (k !== "zoom" && k !== "zoomMode" && k !== "uiTheme") out[k] = S[k];
+    });
+  } catch(_){}
+  return out;
+}
+async function buildShareUrl(){
+  const doc = editor.value;
+  if (/gnote-img:/.test(doc)) return { error: "images" };
+  const packed = await packSheet({ v: 1, t: (curNote && curNote.title) || "G/note sheet", d: doc, s: shareableSettings() });
+  const url = location.origin + location.pathname + "#" + SHARE_HASH + "=" + packed;
+  if (url.length > SHARE_URL_LIMIT) return { error: "large" };
+  return { url };
+}
+$("#btn-share").addEventListener("click", async () => {
+  const btn = $("#btn-share");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    await flushRender();                       // share exactly what is on screen
+    const res = await buildShareUrl();
+    if (res.error === "images"){
+      toast("This sheet contains images, which a link can't carry — use Export and send the PDF.");
+      return;
+    }
+    if (res.error === "large"){
+      toast("This sheet is too long for a link — use Export and send the PDF.");
+      return;
+    }
+    const title = (curNote && curNote.title) || "G/note sheet";
+    if (navigator.share){
+      try {
+        await navigator.share({ title, text: "A cheat sheet made with G/note:", url: res.url });
+        return;
+      } catch(err){
+        if (err && err.name === "AbortError") return;   // the user backed out of the share sheet
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(res.url);
+      toast("Link copied — send it to anyone");
+    } catch(_){
+      window.prompt("Copy this link to share the sheet:", res.url);
+    }
+  } catch(e){
+    console.error(e);
+    toast("Could not build a share link");
+  } finally {
+    btn.disabled = false;
+  }
+});
+/* Opening a shared link imports the sheet as a NEW note, so nothing already
+   saved on this device is ever overwritten. The hash is dropped straight away:
+   reloading this tab must not re-import and undo the reader's own edits. */
+function openSharedSheet(){
+  const m = /^#sheet=([A-Za-z0-9\-_]+)$/.exec(location.hash || "");
+  if (!m) return;
+  try { history.replaceState(null, "", location.pathname + location.search); } catch(_){}
+  unpackSheet(m[1]).then(payload => {
+    if (!payload || typeof payload.d !== "string") throw new Error("bad payload");
+    if (payload.s && typeof payload.s === "object"){
+      try { setSettings(payload.s, false); } catch(_){}
+    }
+    const note = createNote();                 // existing notes stay exactly as they were
+    const title = String(payload.t || "Shared sheet").slice(0, 120);
+    const titleEl = $("#note-title");
+    if (titleEl){
+      titleEl.value = title;
+      titleEl.dispatchEvent(new Event("change"));     // renames + saves through the normal path
+    }
+    if (note) note.title = title;
+    editor.value = payload.d;
+    committedBase = payload.d;
+    editor.dispatchEvent(new Event("input", { bubbles: true }));   // autosave + render
+    renderNow().catch(reportRenderError);
+    toast("Opened a shared sheet as a new note");
+  }).catch(() => toast("That share link looks damaged"));
+}
+openSharedSheet();
+/* A link opened from inside the app (or pasted into the same tab) only changes
+   the hash — the browser does not reload, so the import has to be re-checked. */
+window.addEventListener("hashchange", openSharedSheet);
 function toast(msg){
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200);
@@ -3196,6 +3328,36 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
   const clean = t => (t || "").replace(/\s+/g, " ").trim();
   const levelOf = h => Math.min(6, Math.max(1, parseInt(String(h.tagName).slice(1), 10) || 1));
 
+  /* The preview is only its own scroll box on wide screens: below 760px the CSS
+     lets the sheet flow and the *document* scrolls instead. So every measurement
+     below asks which element really scrolls, and works in viewport coordinates —
+     otherwise a jump on a phone silently scrolls a box that cannot scroll. */
+  function scroller(){
+    const cs = getComputedStyle(preview);
+    const own = (cs.overflowY === "auto" || cs.overflowY === "scroll" || cs.overflowY === "overlay") &&
+                preview.scrollHeight > preview.clientHeight + 4;
+    return own ? preview : (document.scrollingElement || document.documentElement);
+  }
+  function scrollTopOf(sc){
+    return sc === preview ? preview.scrollTop : Math.max(0, window.pageYOffset || 0);
+  }
+  function scrollMaxOf(sc){
+    if (sc === preview) return Math.max(0, preview.scrollHeight - preview.clientHeight);
+    const doc = document.scrollingElement || document.documentElement;
+    return Math.max(0, doc.scrollHeight - window.innerHeight);
+  }
+  /* Where a heading should come to rest: just under the sticky header when the
+     document scrolls, just inside the pane when the pane scrolls. */
+  function readingLine(sc){
+    if (sc === preview) return preview.getBoundingClientRect().top + 12;
+    /* the page header is tall on a phone; keep the heading clear of it when it is
+       on screen, and leave a breathing gap when the header has scrolled away */
+    const hd = document.querySelector(".app-header");
+    const bottom = hd ? hd.getBoundingClientRect().bottom : 0;
+    return (bottom > 24 ? bottom : 0) + 14;
+  }
+  const isDrawer = () => !!(window.matchMedia && window.matchMedia(NARROW).matches);
+
   /* A heading's textContent leaks rendered math (KaTeX ships MathML *and* an
      HTML twin) and drops image alt text. Build the label from a throwaway clone
      whose math becomes its TeX source and whose images become their alt text. */
@@ -3285,7 +3447,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
          paragraphs) — keep the tooltip readable */
       btn.title = "Page " + entry.page + " · " +
                   (entry.text.length > 140 ? entry.text.slice(0, 140) + "…" : entry.text);
-      btn.addEventListener("click", () => goTo(entry));
+      btn.addEventListener("click", () => activate(entry));
       wrap.appendChild(btn);
       entry.btn = btn;
       parentPage[entry.level] = entry.page;
@@ -3295,6 +3457,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
                           " · " + pageCount + (pageCount === 1 ? " page" : " pages");
     list.scrollTop = keepScroll;
     spy();
+    flushPendingJump();          // the panel closed → new pagination → land on the clicked heading
   }
 
   function markActive(idx, reveal){
@@ -3331,8 +3494,8 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
       if (Date.now() < pinned.until){ markActive(pinned.idx, false); return; }
       pinned = null;
     }
-    const box = preview.getBoundingClientRect();
-    const limit = box.top + 16;
+    const sc = scroller();
+    const limit = readingLine(sc) + 4;
     /* The sheet is multi-column, so DOM order is column-major and *not* the
        same as top-to-bottom order. Look at every heading and keep the one that
        sits closest to (but above) the reading line; ties keep the earliest in
@@ -3349,8 +3512,8 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
        force it — but only when the sheet actually scrolls. A sheet short enough
        to fit on one screen is already at the "bottom" from the start, and there
        the top of the document is the first heading, not the last. */
-    const scrollable = preview.scrollHeight > preview.clientHeight + 4;
-    if (scrollable && preview.scrollTop + preview.clientHeight >= preview.scrollHeight - 4) idx = items.length - 1;
+    const scrollable = scrollMaxOf(sc) > 4;
+    if (scrollable && scrollTopOf(sc) >= scrollMaxOf(sc) - 4) idx = items.length - 1;
     markActive(idx, true);
   }
   function queueSpy(){ if (!spyRaf) spyRaf = requestAnimationFrame(spy); }
@@ -3371,7 +3534,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
     } catch(_){}
   }
 
-  function goTo(entry){
+  function goTo(entry, opts){
     const h = entry.heading;
     if (!h || !h.isConnected){
       /* a render landed between the click and the jump — rebuild, then follow
@@ -3382,18 +3545,46 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
       if (same) goTo(same);
       return;
     }
-    const box = preview.getBoundingClientRect();
+    const sc = scroller();
     const r = h.getBoundingClientRect();
-    const top = Math.max(0, preview.scrollTop + (r.top - box.top) - 12);
+    const top = Math.max(0, scrollTopOf(sc) + (r.top - readingLine(sc)));
+    const smooth = !reduceMotion && !(opts && opts.instant);
     try {
-      if (preview.scrollTo) preview.scrollTo({ top: top, behavior: reduceMotion ? "auto" : "smooth" });
-      else preview.scrollTop = top;
-    } catch(_) { preview.scrollTop = top; }
+      if (sc === preview && preview.scrollTo) preview.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
+      else if (sc !== preview && typeof window.scrollTo === "function") window.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
+      else sc.scrollTop = top;
+    } catch(_) { sc.scrollTop = top; }
     flash(h);
     const idx = items.indexOf(entry);
     markActive(idx, false);
     pinned = { idx: Math.max(0, idx), until: Date.now() + 950 };
     queueSpy();
+  }
+
+  /* A tap on an entry now closes the panel — on a phone the drawer would
+     otherwise sit on top of the very section it just revealed. On desktop
+     closing hands the width back to the sheet, which re-paginates and moves the
+     headings, so the jump is re-targeted once the new pagination has settled. */
+  let pendingJump = null, pendingTimer = null;
+  function resolvePending(){
+    if (!pendingJump) return null;
+    return items.find(e => e.text === pendingJump.text && e.page === pendingJump.page) ||
+           items.find(e => e.text === pendingJump.text) || null;
+  }
+  function flushPendingJump(){
+    if (pendingTimer){ clearTimeout(pendingTimer); pendingTimer = null; }
+    if (!pendingJump) return;
+    const entry = resolvePending();
+    if (!entry) return;                       // not rebuilt yet — the next build retries
+    pendingJump = null;
+    goTo(entry, { instant: true });
+  }
+  function activate(entry){
+    const drawer = isDrawer();
+    setOpen(false, false, !drawer);           // a drawer is an overlay: no re-pagination needed
+    if (drawer){ goTo(entry); return; }
+    pendingJump = { text: entry.text, page: entry.page };
+    if (!pendingTimer) pendingTimer = setTimeout(() => { pendingTimer = null; flushPendingJump(); }, 700);
   }
 
   function setOpen(open, persist = true, repaginate = true){
@@ -3408,14 +3599,18 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 
   toggleBtn.addEventListener("click", () => setOpen(document.body.classList.contains("outline-closed")));
   if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false));
-  preview.addEventListener("scroll", () => {
+  function onScroll(){
     if (pinned && Date.now() < pinned.until) return;   // the jump itself is still settling
     pinned = null;
     queueSpy();
-  }, { passive: true });
+  }
+  preview.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("scroll", onScroll, { passive: true });   // phones scroll the document, not the pane
   /* any real gesture means the user is steering again — hand control back */
   ["wheel", "touchstart", "pointerdown", "keydown"].forEach(ev => {
-    preview.addEventListener(ev, () => { pinned = null; queueSpy(); }, { passive: true });
+    const release = () => { pinned = null; queueSpy(); };
+    preview.addEventListener(ev, release, { passive: true });
+    window.addEventListener(ev, release, { passive: true });
   });
   window.addEventListener("resize", queueSpy);
 
