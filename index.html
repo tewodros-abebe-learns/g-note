@@ -504,6 +504,22 @@ dialog#notesdlg::backdrop{background:rgba(43,32,14,.45);backdrop-filter:blur(2px
 [data-theme="dark"] .preview-pane{scrollbar-color:#4c4132 transparent}
 [data-theme="dark"] .notes-dlg-foot{border-top-color:var(--line)}
 
+/* Share: the "PDF ready" sheet (its tap is the user gesture the OS needs) */
+.share-card{position:fixed;right:16px;bottom:16px;z-index:95;width:min(330px,calc(100vw - 24px));
+  background:#fffdf8;border:1px solid var(--line);border-radius:16px;padding:14px 14px 12px;
+  box-shadow:0 18px 45px rgba(32,29,24,.24);display:flex;flex-direction:column;gap:10px}
+.share-card-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.share-card-head strong{font-size:13.5px;color:var(--ink)}
+.share-card-sub{font-size:11px;color:var(--muted)}
+.share-card-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.share-card-actions #share-go{flex:1 1 auto;justify-content:center}
+.share-card-note{margin:0;font-size:11px;line-height:1.45;color:var(--muted)}
+[data-theme="dark"] .share-card{background:#241f18;border-color:#3a3128;box-shadow:0 18px 45px rgba(0,0,0,.45)}
+@media (max-width:760px){ .share-card{left:12px;right:12px;bottom:12px;width:auto} }
+
+/* nothing slides while the first paint is settling (see the boot script) */
+html.booting .inspector,html.booting .outline-pane{transition:none !important}
+
 /* the mobile drawer is an overlay: the page behind it must not scroll */
 @media (max-width:1180px){ body.outline-lock{overflow:hidden} }
 
@@ -695,6 +711,29 @@ body.outline-closed .outline-pane{display:none}
 </style>
 </head>
 <body>
+<script>
+/* First-paint state. The stylesheet draws both side panels open, and the theme
+   light, until the app script at the bottom of the page gets a chance to run —
+   so on a phone (where they start closed) every refresh painted the drawers open
+   and then slid them away, and dark-mode users got a white flash first. This
+   runs before any markup is parsed and only sets two class names and a theme
+   attribute. */
+(function(){
+  var root = document.documentElement, body = document.body;
+  var get = function(k){ try { return localStorage.getItem(k); } catch(e){ return null; } };
+  var narrow = false;
+  try { narrow = window.matchMedia("(max-width: 1180px)").matches; } catch(e){}
+  var design = get("cheatsheet-studio.design"), outline = get("cheatsheet-studio.outline");
+  if (design === "closed" || (design === null && narrow)) body.classList.add("design-closed");
+  if (outline === "closed" || (outline === null && narrow)) body.classList.add("outline-closed");
+  root.classList.add("booting");                 /* hold the slide animations until settled */
+  try {
+    var raw = get("cs-studio:settings:v1");
+    var theme = raw ? JSON.parse(raw).uiTheme : null;
+    if (theme === "dark") root.dataset.theme = "dark";
+  } catch(e){}
+})();
+</script>
 <header class="app-header">
   <div class="brand-wrap">
     <div class="logo-mark" aria-hidden="true">G/</div>
@@ -2514,7 +2553,79 @@ async function renderNow(){
   } finally {
     pagesEl.style.zoom = S.zoom; // paginate measures at zoom 1; always restore, even on error
   }
+  if (anchorPending){
+    restorePreviewAnchor();
+    /* the browser may lay out once more after zoom is restored */
+    requestAnimationFrame(() => { if (!anchorPending) return; });
+  }
   return true;
+}
+/* ---------------- keep your place across a re-pagination ----------------
+   Opening or closing a side panel changes the column width, so the sheet
+   re-paginates and every heading moves. Without this the reader was thrown back
+   to the top of the sheet by a button that is only supposed to change the
+   chrome. The heading under the top edge is remembered together with its offset,
+   and put back once the new pagination is in place. */
+let anchorPending = null;
+function currentScroller(){
+  const pv = $("#preview-pane");
+  if (!pv) return null;
+  const cs = getComputedStyle(pv);
+  const own = (cs.overflowY === "auto" || cs.overflowY === "scroll" || cs.overflowY === "overlay") &&
+              pv.scrollHeight > pv.clientHeight + 4;
+  return own ? pv : (document.scrollingElement || document.documentElement);
+}
+function scrollPosOf(sc){ return sc === $("#preview-pane") ? sc.scrollTop : Math.max(0, window.pageYOffset || 0); }
+function scrollToPos(sc, y){
+  if (sc === $("#preview-pane")) { sc.scrollTop = y; return; }
+  try { window.scrollTo(0, y); } catch(_) { sc.scrollTop = y; }
+}
+function computePreviewAnchor(){
+  const pv = $("#preview-pane");
+  if (!pv || pv.classList.contains("empty")) return null;
+  const sc = currentScroller();
+  if (!sc) return null;
+  const heads = [...pv.querySelectorAll("h1,h2,h3,h4,h5,h6")];
+  if (!heads.length) return null;
+  const line = sc === pv ? pv.getBoundingClientRect().top : 0;
+  let best = null, bestTop = -Infinity;
+  for (const h of heads){
+    const r = h.getBoundingClientRect();
+    if (r.top <= line + 2 && r.top > bestTop){ best = h; bestTop = r.top; }
+  }
+  if (!best) best = heads[0], bestTop = best.getBoundingClientRect().top;
+  return { index: heads.indexOf(best), text: best.textContent.trim(), offset: Math.round(bestTop - line) };
+}
+function applyPreviewAnchor(a){
+  if (!a) return;
+  const pv = $("#preview-pane");
+  if (!pv) return;
+  const sc = currentScroller();
+  if (!sc) return;
+  const heads = [...pv.querySelectorAll("h1,h2,h3,h4,h5,h6")];
+  if (!heads.length) return;
+  let target = heads[a.index];
+  if (!target || target.textContent.trim() !== a.text) target = heads.find(h => h.textContent.trim() === a.text) || null;
+  if (!target) return;
+  const line = sc === pv ? pv.getBoundingClientRect().top : 0;
+  const delta = Math.round(target.getBoundingClientRect().top - line) - a.offset;
+  if (Math.abs(delta) < 2) return;
+  scrollToPos(sc, Math.max(0, scrollPosOf(sc) + delta));
+}
+function capturePreviewAnchor(){
+  const a = computePreviewAnchor();
+  if (!a) return null;
+  anchorPending = a;
+  /* if no render lands (nothing actually changed), never apply this to a much
+     later edit */
+  clearTimeout(capturePreviewAnchor._t);
+  capturePreviewAnchor._t = setTimeout(() => { if (anchorPending === a) anchorPending = null; }, 4000);
+  return a;
+}
+function restorePreviewAnchor(){
+  const a = anchorPending;
+  anchorPending = null;
+  applyPreviewAnchor(a);
 }
 function showFatalError(error){
   const message = error && error.message ? error.message : String(error || "Unknown render error");
@@ -2558,6 +2669,7 @@ function syncHeaderHeight(){
   if (header) document.documentElement.style.setProperty("--header-h", header.offsetHeight + "px");
 }
 function setDesignOpen(open, persist = true){
+  if (document.body.classList.contains("design-closed") === open) capturePreviewAnchor();
   document.body.classList.toggle("design-closed", !open);
   const btn = $("#btn-design");
   if (btn) btn.setAttribute("aria-expanded", String(open));
@@ -2917,6 +3029,9 @@ function pdfBusy(show, msg){
   if (m && msg) m.textContent = msg;
 }
 async function buildPdfBlob(){
+  /* captured first: flushing the render (below) re-paginates the sheet, which
+     drops the preview back to the top before we ever get to measure it */
+  const savedAnchor = computePreviewAnchor();
   await flushRender();                                   // share exactly what is on screen
   const { html2canvas, jsPDF } = await loadPdfLibs();
   const pagesEl = $("#pages");
@@ -2927,6 +3042,9 @@ async function buildPdfBlob(){
   const scale = pages.length <= 2 ? 2 : pages.length <= 5 ? 1.6 : 1.25;
   const prevZoom = pagesEl.style.zoom;
   const bg = getComputedStyle(document.documentElement).getPropertyValue("--sheet-bg").trim() || "#ffffff";
+  /* rendering at 100% collapses the preview's layout and the flush above
+     re-paginates it — both would drop the reader back to the top */
+  applyPreviewAnchor(savedAnchor);
   pdfBusy(true, "Preparing PDF…");
   pagesEl.style.zoom = "1";
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -2949,6 +3067,8 @@ async function buildPdfBlob(){
     return { blob: pdf.output("blob"), name: (safeFileName((curNote && curNote.title)) || "g-note") + ".pdf", pages: pages.length };
   } finally {
     pagesEl.style.zoom = prevZoom;
+    applyPreviewAnchor(savedAnchor);
+    requestAnimationFrame(() => applyPreviewAnchor(savedAnchor));   // in case the browser lays out again
     pdfBusy(false);
   }
 }
@@ -2959,36 +3079,135 @@ function saveBlob(blob, name){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 8000);
 }
+
+/* Handing a file to the system share sheet needs a *fresh* user gesture. Building
+   the PDF takes seconds, which is longer than Chrome keeps that gesture alive, so
+   the direct attempt often fails — and the old code then quietly downloaded the
+   file instead, which made Share look like a second download button. Now the file
+   is offered in a small sheet whose tap is itself the gesture. */
+function pdfFileOf(blob, name){
+  try { return new File([blob], name, { type: "application/pdf" }); }
+  catch(_) { const f = new Blob([blob], { type: "application/pdf" }); f.name = name; return f; }
+}
+function canShareFile(file){
+  try {
+    if (typeof navigator.share !== "function") return false;
+    if (typeof navigator.canShare !== "function") return true;   // older API: try it
+    return navigator.canShare({ files: [file] });
+  } catch(_) { return false; }
+}
+async function tryShare(file, title){
+  try {
+    await navigator.share({ files: [file], title, text: "Cheat sheet from G/note" });
+    return "shared";
+  } catch (err){
+    if (err && err.name === "AbortError") return "aborted";      // they backed out on purpose
+    return "blocked";                                           // no gesture / unsupported
+  }
+}
+let shareCardEl = null;
+function hideShareCard(){
+  if (shareCardEl){ shareCardEl.remove(); shareCardEl = null; }
+  document.removeEventListener("keydown", onShareCardKey, true);
+}
+function onShareCardKey(e){ if (e.key === "Escape") hideShareCard(); }
+function showShareCard(st){
+  hideShareCard();
+  const kb = Math.max(1, Math.round(st.blob.size / 1024));
+  const card = document.createElement("div");
+  card.id = "share-card";
+  card.className = "share-card";
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-label", "Share the finished PDF");
+
+  const head = document.createElement("div");
+  head.className = "share-card-head";
+  const title = document.createElement("strong");
+  title.textContent = "PDF ready";
+  const sub = document.createElement("span");
+  sub.className = "share-card-sub";
+  sub.textContent = st.pages + (st.pages === 1 ? " page" : " pages") + " · " + kb + " KB";
+  head.append(title, sub);
+
+  const actions = document.createElement("div");
+  actions.className = "share-card-actions";
+  if (st.canFile){
+    const go = document.createElement("button");
+    go.type = "button"; go.className = "btn primary"; go.id = "share-go";
+    go.textContent = "Share PDF";
+    go.addEventListener("click", async () => {
+      go.disabled = true;
+      const res = await tryShare(st.file, st.title);
+      go.disabled = false;
+      if (res !== "blocked") hideShareCard();
+      else toast("This browser blocked the share sheet — download it instead");
+    });
+    actions.appendChild(go);
+  }
+  const dl = document.createElement("button");
+  dl.type = "button"; dl.className = "btn"; dl.id = "share-dl";
+  dl.textContent = "Download";
+  dl.addEventListener("click", () => { saveBlob(st.blob, st.name); hideShareCard(); toast("Saved " + st.name); });
+  const x = document.createElement("button");
+  x.type = "button"; x.className = "btn ghost icon-only"; x.id = "share-x";
+  x.setAttribute("aria-label", "Close");
+  x.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  x.addEventListener("click", hideShareCard);
+  actions.append(dl, x);
+  card.append(head, actions);
+  if (!st.canFile){
+    const note = document.createElement("p");
+    note.className = "share-card-note";
+    note.textContent = "This browser can't hand files to other apps. Download it and attach it yourself.";
+    card.appendChild(note);
+  }
+  document.body.appendChild(card);
+  shareCardEl = card;
+  document.addEventListener("keydown", onShareCardKey, true);
+  setTimeout(() => {
+    document.addEventListener("pointerdown", function outside(e){
+      if (!shareCardEl || shareCardEl.contains(e.target)) return;
+      if (e.target.closest && e.target.closest("#btn-share")) return;
+      hideShareCard();
+      document.removeEventListener("pointerdown", outside, true);
+    }, true);
+  }, 0);
+  const primary = card.querySelector("#share-go") || card.querySelector("#share-dl");
+  if (primary) primary.focus({ preventScroll: true });
+}
+
 $("#btn-share").addEventListener("click", async () => {
   const btn = $("#btn-share");
   if (btn.disabled) return;
   const label = btn.querySelector(".btn-label");
-  const restore = () => { btn.disabled = false; if (label) label.textContent = "Share"; };
   btn.disabled = true;
   if (label) label.textContent = "Preparing…";
   try {
-    const { blob, name } = await buildPdfBlob();
-    const file = new File([blob], name, { type: "application/pdf" });
-    let done = false;
-    if (navigator.canShare && navigator.canShare({ files: [file] })){
-      try {
-        await navigator.share({ files: [file], title: name.replace(/\.pdf$/i, ""), text: "Cheat sheet from G/note" });
-        done = true;
-      } catch(err){
-        if (err && err.name === "AbortError") return;     // the user backed out of the share sheet
-      }
+    const { blob, name, pages } = await buildPdfBlob();
+    const file = pdfFileOf(blob, name);
+    const title = name.replace(/\.pdf$/i, "");
+    const canFile = canShareFile(file);
+    /* fast path: if the gesture is still alive, the system sheet opens right away */
+    if (canFile){
+      const res = await tryShare(file, title);
+      if (res !== "blocked") return;
     }
-    if (!done){
-      saveBlob(blob, name);                               // no share sheet here → give them the file
-      toast("PDF ready — " + name);
-    }
+    showShareCard({ blob, file, name, title, pages, canFile });
   } catch(e){
     console.error(e);
     toast("Could not build the PDF — try Export instead");
   } finally {
-    restore();
+    btn.disabled = false;
+    if (label) label.textContent = "Share";
   }
 });
+/* warm the PDF engine while the app is idle, so Share starts instantly */
+try {
+  const warm = () => { loadPdfLibs().catch(() => {}); };
+  if ("requestIdleCallback" in window) requestIdleCallback(warm, { timeout: 4000 });
+  else setTimeout(warm, 2500);
+} catch(_){}
+
 function toast(msg){
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200);
@@ -3734,6 +3953,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
   }
 
   function setOpen(open, persist = true, repaginate = true){
+    if (repaginate !== false && document.body.classList.contains("outline-closed") === open) capturePreviewAnchor();
     document.body.classList.toggle("outline-closed", !open);
     /* a drawer over a page that itself scrolls: freeze the page behind it, or a
        tap meant for the list drags the sheet along underneath */
@@ -3790,6 +4010,9 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
     try { new MutationObserver(scheduleBuild).observe(pagesRoot, { childList: true, subtree: true }); } catch(_){}
   }
 
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    document.documentElement.classList.remove("booting");   // panels may animate again
+  }));
   build();                                    // empty state before the first render
   let pref = null;
   try { pref = lsGet(LS_KEY); } catch(_){}
