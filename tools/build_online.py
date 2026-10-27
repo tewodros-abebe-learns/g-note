@@ -13,6 +13,8 @@ app-1.js..app-4.js, vercel.json, manifest.json}:
     "use strict", globals) are preserved byte-for-byte.
   - vendor <script>/<link> -> pinned jsdelivr equivalents (KaTeX + DOMPurify
     hash-identical to vendored; Marked = official 12.0.2 UMD min build).
+  - the PDF engine Share loads at runtime (html2canvas + jsPDF) -> the pinned
+    jsdelivr builds, since deploy/ ships without a vendor folder.
 """
 from pathlib import Path
 import re, hashlib, json, shutil
@@ -75,7 +77,21 @@ for t in targets:
     cuts.append(nl)
 parts = [app_js[:cuts[0]], app_js[cuts[0]:cuts[1]], app_js[cuts[1]:cuts[2]], app_js[cuts[2]:]]
 assert ''.join(parts) == app_js
-for i, part in enumerate(parts, 1):
+
+# Share loads its PDF engine at runtime from vendor/; the CDN build has no
+# vendor folder, so point those two paths at the pinned jsdelivr builds.
+lib_map = {
+    'vendor/html2canvas.min.js': 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+    'vendor/jspdf.umd.min.js':   'https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js',
+}
+def _cdn(part):
+    for local, cdn in lib_map.items():
+        part = part.replace(local, cdn)
+    return part
+parts_cdn = [_cdn(part) for part in parts]
+assert all('vendor/' not in part.replace('vendor/ folder is deployed', '') for part in parts_cdn), \
+    'vendor lib path left in the CDN build'
+for i, part in enumerate(parts_cdn, 1):
     (OUT / f'app-{i}.js').write_text(part, encoding='utf-8')
 
 # --- shell -------------------------------------------------------------------

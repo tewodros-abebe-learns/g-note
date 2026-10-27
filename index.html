@@ -504,6 +504,20 @@ dialog#notesdlg::backdrop{background:rgba(43,32,14,.45);backdrop-filter:blur(2px
 [data-theme="dark"] .preview-pane{scrollbar-color:#4c4132 transparent}
 [data-theme="dark"] .notes-dlg-foot{border-top-color:var(--line)}
 
+/* the mobile drawer is an overlay: the page behind it must not scroll */
+@media (max-width:1180px){ body.outline-lock{overflow:hidden} }
+
+/* Share: full-screen scrim while the PDF is rendered */
+.pdf-busy{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
+  background:rgba(43,32,14,.42)}
+.pdf-busy-card{display:flex;align-items:center;gap:11px;background:#fffdf8;color:#25231f;
+  border:1px solid var(--line);border-radius:14px;padding:15px 20px;
+  font:600 13px/1.3 inherit;box-shadow:0 18px 45px rgba(32,29,24,.28)}
+.pdf-spin{width:16px;height:16px;border-radius:50%;border:2px solid rgba(224,138,0,.28);
+  border-top-color:var(--accent);animation:pdfspin .7s linear infinite;flex:0 0 auto}
+@keyframes pdfspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){ .pdf-spin{animation-duration:2.4s} }
+
 /* ============================= Outline panel (left) ============================= */
 .outline-pane{
   min-width:0;min-height:0;display:flex;flex-direction:column;
@@ -1111,7 +1125,7 @@ $$\vec{F}=m\vec{a}$$
   <section class="preview-pane" id="preview-pane" aria-label="Rendered sheet preview">
     <div class="preview-toolbar">
       <span class="spacer"></span>
-      <button class="btn" id="btn-share" title="Send this sheet to someone as a link">
+      <button class="btn" id="btn-share" title="Send the finished PDF to someone">
         <svg class="icon" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m8 7 4-3 4 3"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
         <span class="btn-label">Share</span>
       </button>
@@ -2856,133 +2870,125 @@ $("#btn-print").addEventListener("click", async () => {
 });
 window.addEventListener("afterprint", () => { document.title = APP_TITLE; });
 
-/* ---------------- Share ----------------
-   Export hands the sheet to the browser's print dialog, which owns the PDF — so
-   there is no PDF file here to attach. Share therefore sends a link that carries
-   the sheet itself (text + the design settings you are looking at) and rebuilds
-   it on any device; your friend gets the identical sheet and one Export tap
-   gives them the PDF. Images can't travel inside a URL, so those are refused
-   with a hint to send the PDF instead. */
-const SHARE_HASH = "sheet";
-const SHARE_URL_LIMIT = 12000;      // chat apps and mail clients truncate longer links
-function b64urlEncode(bytes){
-  let bin = "";
-  for (let i = 0; i < bytes.length; i += 0x8000){
-    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+/* ---------------- Share: a real PDF file ----------------
+   Export goes through the browser's print dialog, which owns the PDF and never
+   hands the file to the page. Share builds the PDF itself instead — every
+   rendered sheet page is rasterised at print resolution and laid into a
+   jsPDF document at the exact paper size — so the actual file can go straight
+   into the phone's share sheet (WhatsApp, Gmail, Drive…) or be downloaded. */
+let PDF_LIBS = null;
+function loadScriptOnce(src){
+  return new Promise((resolve, reject) => {
+    const abs = new URL(src, location.href).href;
+    if ([...document.scripts].some(s => s.src === abs)) return resolve();
+    const el = document.createElement("script");
+    el.src = src; el.async = true;
+    el.onload = () => resolve();
+    el.onerror = () => reject(new Error("Could not load " + src));
+    document.head.appendChild(el);
+  });
+}
+function loadPdfLibs(){
+  if (!PDF_LIBS){
+    PDF_LIBS = (async () => {
+      await loadScriptOnce("vendor/html2canvas.min.js");
+      await loadScriptOnce("vendor/jspdf.umd.min.js");
+      if (typeof window.html2canvas !== "function" || !window.jspdf || typeof window.jspdf.jsPDF !== "function"){
+        throw new Error("PDF engine unavailable");
+      }
+      return { html2canvas: window.html2canvas, jsPDF: window.jspdf.jsPDF };
+    })().catch(err => { PDF_LIBS = null; throw err; });
   }
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return PDF_LIBS;
 }
-function b64urlDecode(str){
-  const padded = str.replace(/-/g, "+").replace(/_/g, "/");
-  const bin = atob(padded + "=".repeat((4 - padded.length % 4) % 4));
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-async function packSheet(payload){
-  const json = JSON.stringify(payload);
-  if (typeof CompressionStream === "function"){
-    try {
-      const packed = new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"));
-      return "1" + b64urlEncode(new Uint8Array(await new Response(packed).arrayBuffer()));
-    } catch(_){ /* fall through to plain base64 */ }
+function pdfBusy(show, msg){
+  let el = $("#pdf-busy");
+  if (!show){ if (el) el.remove(); return; }
+  if (!el){
+    el = document.createElement("div");
+    el.id = "pdf-busy";
+    el.className = "pdf-busy";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    el.innerHTML = '<div class="pdf-busy-card"><span class="pdf-spin" aria-hidden="true"></span><span id="pdf-busy-msg"></span></div>';
+    document.body.appendChild(el);
   }
-  return "0" + b64urlEncode(new TextEncoder().encode(json));
+  const m = $("#pdf-busy-msg");
+  if (m && msg) m.textContent = msg;
 }
-async function unpackSheet(data){
-  const deflated = data.charAt(0) === "1";
-  const bytes = b64urlDecode(data.slice(1));
-  if (!deflated) return JSON.parse(new TextDecoder().decode(bytes));
-  const plain = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  return JSON.parse(await new Response(plain).text());
-}
-/* Everything that shapes the printed page — but not this browser's UI theme or
-   zoom, which stay the reader's own. */
-function shareableSettings(){
-  const out = {};
+async function buildPdfBlob(){
+  await flushRender();                                   // share exactly what is on screen
+  const { html2canvas, jsPDF } = await loadPdfLibs();
+  const pagesEl = $("#pages");
+  const pages = [...pagesEl.querySelectorAll(".page")];
+  if (!pages.length) throw new Error("Nothing to export");
+  /* WYSIWYG: the preview is scaled with CSS zoom, which confuses the copy the
+     rasteriser makes, so it is briefly neutralised (behind a scrim). */
+  const scale = pages.length <= 2 ? 2 : pages.length <= 5 ? 1.6 : 1.25;
+  const prevZoom = pagesEl.style.zoom;
+  const bg = getComputedStyle(document.documentElement).getPropertyValue("--sheet-bg").trim() || "#ffffff";
+  pdfBusy(true, "Preparing PDF…");
+  pagesEl.style.zoom = "1";
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   try {
-    Object.keys(S).forEach(k => {
-      if (k !== "zoom" && k !== "zoomMode" && k !== "uiTheme") out[k] = S[k];
-    });
-  } catch(_){}
-  return out;
+    const a4 = S.paper !== "letter";
+    const wmm = a4 ? 210 : 215.9, hmm = a4 ? 297 : 279.4;
+    const pdf = new jsPDF({ unit: "mm", format: [wmm, hmm], orientation: "portrait", compress: true });
+    const title = (curNote && curNote.title) || "G/note sheet";
+    try { pdf.setProperties({ title, creator: "G/note", subject: "Cheat sheet" }); } catch(_){}
+    for (let i = 0; i < pages.length; i++){
+      pdfBusy(true, "Preparing PDF… page " + (i + 1) + " of " + pages.length);
+      await new Promise(r => setTimeout(r, 30));         // let that message paint
+      const canvas = await html2canvas(pages[i], {
+        scale, backgroundColor: bg, logging: false, useCORS: true, imageTimeout: 20000,
+        windowWidth: document.documentElement.clientWidth,
+      });
+      if (i) pdf.addPage([wmm, hmm], "portrait");
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.88), "JPEG", 0, 0, wmm, hmm, undefined, "FAST");
+    }
+    return { blob: pdf.output("blob"), name: (safeFileName((curNote && curNote.title)) || "g-note") + ".pdf", pages: pages.length };
+  } finally {
+    pagesEl.style.zoom = prevZoom;
+    pdfBusy(false);
+  }
 }
-async function buildShareUrl(){
-  const doc = editor.value;
-  if (/gnote-img:/.test(doc)) return { error: "images" };
-  const packed = await packSheet({ v: 1, t: (curNote && curNote.title) || "G/note sheet", d: doc, s: shareableSettings() });
-  const url = location.origin + location.pathname + "#" + SHARE_HASH + "=" + packed;
-  if (url.length > SHARE_URL_LIMIT) return { error: "large" };
-  return { url };
+function saveBlob(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 8000);
 }
 $("#btn-share").addEventListener("click", async () => {
   const btn = $("#btn-share");
   if (btn.disabled) return;
+  const label = btn.querySelector(".btn-label");
+  const restore = () => { btn.disabled = false; if (label) label.textContent = "Share"; };
   btn.disabled = true;
+  if (label) label.textContent = "Preparing…";
   try {
-    await flushRender();                       // share exactly what is on screen
-    const res = await buildShareUrl();
-    if (res.error === "images"){
-      toast("This sheet contains images, which a link can't carry — use Export and send the PDF.");
-      return;
-    }
-    if (res.error === "large"){
-      toast("This sheet is too long for a link — use Export and send the PDF.");
-      return;
-    }
-    const title = (curNote && curNote.title) || "G/note sheet";
-    if (navigator.share){
+    const { blob, name } = await buildPdfBlob();
+    const file = new File([blob], name, { type: "application/pdf" });
+    let done = false;
+    if (navigator.canShare && navigator.canShare({ files: [file] })){
       try {
-        await navigator.share({ title, text: "A cheat sheet made with G/note:", url: res.url });
-        return;
+        await navigator.share({ files: [file], title: name.replace(/\.pdf$/i, ""), text: "Cheat sheet from G/note" });
+        done = true;
       } catch(err){
-        if (err && err.name === "AbortError") return;   // the user backed out of the share sheet
+        if (err && err.name === "AbortError") return;     // the user backed out of the share sheet
       }
     }
-    try {
-      await navigator.clipboard.writeText(res.url);
-      toast("Link copied — send it to anyone");
-    } catch(_){
-      window.prompt("Copy this link to share the sheet:", res.url);
+    if (!done){
+      saveBlob(blob, name);                               // no share sheet here → give them the file
+      toast("PDF ready — " + name);
     }
   } catch(e){
     console.error(e);
-    toast("Could not build a share link");
+    toast("Could not build the PDF — try Export instead");
   } finally {
-    btn.disabled = false;
+    restore();
   }
 });
-/* Opening a shared link imports the sheet as a NEW note, so nothing already
-   saved on this device is ever overwritten. The hash is dropped straight away:
-   reloading this tab must not re-import and undo the reader's own edits. */
-function openSharedSheet(){
-  const m = /^#sheet=([A-Za-z0-9\-_]+)$/.exec(location.hash || "");
-  if (!m) return;
-  try { history.replaceState(null, "", location.pathname + location.search); } catch(_){}
-  unpackSheet(m[1]).then(payload => {
-    if (!payload || typeof payload.d !== "string") throw new Error("bad payload");
-    if (payload.s && typeof payload.s === "object"){
-      try { setSettings(payload.s, false); } catch(_){}
-    }
-    const note = createNote();                 // existing notes stay exactly as they were
-    const title = String(payload.t || "Shared sheet").slice(0, 120);
-    const titleEl = $("#note-title");
-    if (titleEl){
-      titleEl.value = title;
-      titleEl.dispatchEvent(new Event("change"));     // renames + saves through the normal path
-    }
-    if (note) note.title = title;
-    editor.value = payload.d;
-    committedBase = payload.d;
-    editor.dispatchEvent(new Event("input", { bubbles: true }));   // autosave + render
-    renderNow().catch(reportRenderError);
-    toast("Opened a shared sheet as a new note");
-  }).catch(() => toast("That share link looks damaged"));
-}
-openSharedSheet();
-/* A link opened from inside the app (or pasted into the same tab) only changes
-   the hash — the browser does not reload, so the import has to be re-checked. */
-window.addEventListener("hashchange", openSharedSheet);
 function toast(msg){
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200);
@@ -3328,6 +3334,114 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
   const clean = t => (t || "").replace(/\s+/g, " ").trim();
   const levelOf = h => Math.min(6, Math.max(1, parseInt(String(h.tagName).slice(1), 10) || 1));
 
+  /* ---- jumping into the EDITOR ----
+     The panel lists headings of the *rendered* sheet, but the thing you actually
+     want to edit is the markdown. Scan the editor for its headings (ATX and
+     setext, ignoring fenced code) and pair them with the rendered ones in order,
+     so a click can put you on the exact line instead of just moving the preview. */
+  function sourceHeadings(text){
+    const out = [];
+    const lines = String(text).split("\n");
+    let offset = 0, fence = null;
+    for (let i = 0; i < lines.length; i++){
+      const line = lines[i];
+      if (fence){
+        if (line.trim().startsWith(fence)) fence = null;
+      } else {
+        const f = /^\s{0,3}(```|~~~)/.exec(line);
+        if (f) fence = f[1];
+        else {
+          const atx = /^\s{0,3}(#{1,6})\s+/ .exec(line);
+          if (atx){
+            const text = line.slice(atx[0].length).replace(/\s+#*\s*$/, "").trim();
+            out.push({ level: atx[1].length, text, offset, lineEnd: offset + line.length });
+          } else if (i + 1 < lines.length && line.trim() && !/^\s{0,3}([-*+]|\d+\.)\s/.test(line) &&
+                     /^\s{0,3}(=+|-+)\s*$/.test(lines[i + 1])){
+            out.push({ level: lines[i + 1].trim().charAt(0) === "=" ? 1 : 2, text: line.trim(),
+                       offset, lineEnd: offset + line.length });
+          }
+        }
+      }
+      offset += line.length + 1;
+    }
+    return out;
+  }
+  /* Rendering drops far more than emphasis markers — math delimiters become
+     typeset glyphs, links keep only their label — so compare a canonical form:
+     letters and digits only. */
+  const norm = t => String(t || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const key = t => norm(t).replace(/[^a-z0-9]+/g, "");
+  /* Greedy in-order pairing: exact heading text first, then a prefix match, then
+     whatever is left. A rendered heading the source parser cannot see (a raw HTML
+     tag swallowing markdown, say) simply keeps the next unused source heading. */
+  function pairWithSource(entries, src){
+    const used = new Array(src.length).fill(false);
+    const take = (pred) => {
+      for (let s = 0; s < src.length; s++){
+        if (used[s]) continue;
+        if (pred(src[s])){ used[s] = true; return src[s]; }
+      }
+      return null;
+    };
+    const result = new Array(entries.length).fill(null);
+    let cursor = 0;
+    for (let i = 0; i < entries.length; i++){
+      const want = key(entries[i].text);
+      let hit = null;
+      // 1. exact match, in document order from the last hit (keeps duplicates in order)
+      for (let s = cursor; s < src.length && !hit; s++){
+        if (used[s]) continue;
+        if (src[s].level === entries[i].level && key(src[s].text) === want){ hit = src[s]; used[s] = true; cursor = s + 1; }
+      }
+      // 2. exact match anywhere, then same level + a long shared prefix
+      if (!hit) hit = take(s => key(s.text) === want);
+      if (!hit && want.length > 5) hit = take(s => s.level === entries[i].level && key(s.text).startsWith(want.slice(0, 16)));
+      // 3. a rendered heading the source cannot express (raw HTML swallowed the
+      //    markdown): fall back to the nearest unused heading of that level
+      if (!hit) hit = take(s => s.level === entries[i].level);
+      result[i] = hit;
+    }
+    return result;
+  }
+
+  /* Where a character offset sits inside the textarea, measured with a throwaway
+     copy of the editor's own text metrics (there is no API for this). */
+  function editorOffsetTop(offset){
+    const meas = document.createElement("div");
+    meas.className = "editor-highlights";
+    meas.style.cssText = "position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;height:auto;overflow:visible";
+    meas.style.width = editor.clientWidth + "px";
+    meas.textContent = editor.value.slice(0, offset);
+    const marker = document.createElement("span");
+    marker.textContent = "\u200b";
+    meas.appendChild(marker);
+    (editor.parentElement || document.body).appendChild(meas);
+    const y = marker.offsetTop;
+    meas.remove();
+    return y;
+  }
+  function jumpEditor(src){
+    if (!src || !editor) return false;
+    try {
+      const pad = parseFloat(getComputedStyle(editor).paddingTop) || 18;
+      const top = Math.max(0, editorOffsetTop(src.offset) - pad);
+      editor.focus({ preventScroll: true });
+      /* caret at the end of the heading text — never a selection, so a stray
+         keystroke can't wipe the heading */
+      const caret = Math.min(editor.value.length, src.lineEnd);
+      try { editor.setSelectionRange(caret, caret); } catch(_) {}
+      editor.scrollTop = top;
+      /* iOS re-scrolls the field when it takes focus, so pin the position again
+         on the next frame */
+      requestAnimationFrame(() => { try { editor.scrollTop = top; } catch(_){} });
+      if (isDrawer()){
+        const pane = document.querySelector(".editor-pane");
+        if (pane && pane.scrollIntoView) pane.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+      }
+      return true;
+    } catch(_){ return false; }
+  }
+
   /* The preview is only its own scroll box on wide screens: below 760px the CSS
      lets the sheet flow and the *document* scrolls instead. So every measurement
      below asks which element really scrolls, and works in viewport coordinates —
@@ -3418,6 +3532,9 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
       countEl.textContent = broken ? "Preview unavailable" : "No headings yet";
       return;
     }
+    const srcList = sourceHeadings(editor ? editor.value : "");
+    const srcFor = pairWithSource(items, srcList);
+    items.forEach((it, i) => { it.src = srcFor[i]; });
     let wrap = null, currentPage = -1, pageCount = 0;
     const parentPage = [];          // deepest parent page per level, to spot continuations
     for (const entry of items){
@@ -3539,10 +3656,18 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
     if (!h || !h.isConnected){
       /* a render landed between the click and the jump — rebuild, then follow
          the same heading (matched by text, then by page) if it still exists */
+      const wasIdx = Math.max(0, items.indexOf(entry));
+      const wasOcc = occurrenceOf(wasIdx);
       build();
-      const same = items.find(e => e.text === entry.text && e.page === entry.page) ||
-                   items.find(e => e.text === entry.text);
-      if (same) goTo(same);
+      const atIdx = items[wasIdx];
+      if (atIdx && atIdx.text === entry.text) { goTo(atIdx); return; }
+      let seen = 0, found = null;
+      for (const e of items){
+        if (e.text !== entry.text || e.page !== entry.page) continue;
+        if (seen === wasOcc){ found = e; break; }
+        seen++;
+      }
+      if (found || (found = items.find(e => e.text === entry.text))) goTo(found);
       return;
     }
     const sc = scroller();
@@ -3555,6 +3680,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
       else sc.scrollTop = top;
     } catch(_) { sc.scrollTop = top; }
     flash(h);
+    jumpEditor(entry.src);              // put the caret on that section in the editor
     const idx = items.indexOf(entry);
     markActive(idx, false);
     pinned = { idx: Math.max(0, idx), until: Date.now() + 950 };
@@ -3566,10 +3692,29 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
      closing hands the width back to the sheet, which re-paginates and moves the
      headings, so the jump is re-targeted once the new pagination has settled. */
   let pendingJump = null, pendingTimer = null;
+  /* Headings can repeat ("## Same" three times), so identify the click by its
+     position *and* by how many earlier entries share the same text — matching on
+     the text alone would always send you to the first duplicate. */
+  function occurrenceOf(idx){
+    const e = items[idx];
+    if (!e) return 0;
+    let n = 0;
+    for (let i = 0; i < idx; i++) if (items[i].text === e.text && items[i].page === e.page) n++;
+    return n;
+  }
   function resolvePending(){
     if (!pendingJump) return null;
-    return items.find(e => e.text === pendingJump.text && e.page === pendingJump.page) ||
-           items.find(e => e.text === pendingJump.text) || null;
+    const p = pendingJump;
+    const same = items[p.idx];
+    if (same && same.text === p.text && same.page === p.page) return same;
+    let seen = 0;
+    for (let i = 0; i < items.length; i++){
+      const e = items[i];
+      if (e.text !== p.text || e.page !== p.page) continue;
+      if (seen === p.occurrence) return e;
+      seen++;
+    }
+    return items.find(e => e.text === p.text) || null;
   }
   function flushPendingJump(){
     if (pendingTimer){ clearTimeout(pendingTimer); pendingTimer = null; }
@@ -3583,12 +3728,16 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
     const drawer = isDrawer();
     setOpen(false, false, !drawer);           // a drawer is an overlay: no re-pagination needed
     if (drawer){ goTo(entry); return; }
-    pendingJump = { text: entry.text, page: entry.page };
+    pendingJump = { idx: Math.max(0, items.indexOf(entry)), text: entry.text, page: entry.page,
+                    occurrence: occurrenceOf(items.indexOf(entry)) };
     if (!pendingTimer) pendingTimer = setTimeout(() => { pendingTimer = null; flushPendingJump(); }, 700);
   }
 
   function setOpen(open, persist = true, repaginate = true){
     document.body.classList.toggle("outline-closed", !open);
+    /* a drawer over a page that itself scrolls: freeze the page behind it, or a
+       tap meant for the list drags the sheet along underneath */
+    document.body.classList.toggle("outline-lock", !!open && isDrawer());
     toggleBtn.setAttribute("aria-expanded", String(!!open));
     try { panel.inert = !open; } catch(_){}
     if (persist) lsSet(LS_KEY, open ? "open" : "closed");
@@ -3597,7 +3746,11 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
     }
   }
 
-  toggleBtn.addEventListener("click", () => setOpen(document.body.classList.contains("outline-closed")));
+  toggleBtn.addEventListener("click", () => {
+    const willOpen = document.body.classList.contains("outline-closed");
+    setOpen(willOpen);
+    if (willOpen && activeIdx >= 0) requestAnimationFrame(() => revealItem(activeIdx));
+  });
   if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false));
   function onScroll(){
     if (pinned && Date.now() < pinned.until) return;   // the jump itself is still settling
@@ -3612,7 +3765,13 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
     preview.addEventListener(ev, release, { passive: true });
     window.addEventListener(ev, release, { passive: true });
   });
-  window.addEventListener("resize", queueSpy);
+  window.addEventListener("resize", () => {
+    queueSpy();
+    const open = !document.body.classList.contains("outline-closed");
+    document.body.classList.toggle("outline-lock", open && isDrawer());
+    /* moving between drawer and docked layout must re-measure the page width */
+    syncHeaderHeight(); applyCSSVars(); queueRepaginate();
+  });
 
   /* Every render replaces #pages. Pagination can take a while on long sheets,
      so rebuild only once the page/heading counts stop changing — a fixed delay
