@@ -320,9 +320,15 @@ input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;b
   background:transparent;border:0;border-radius:0;padding:0;position:relative;z-index:5;
 }
 .preview-toolbar .spacer{flex:1}
+.toolbar-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
 
 /* ============================= The sheet (screen = print) ============================= */
-.pages{margin:0 auto;width:var(--page-w);transform-origin:top center}
+.pages-scaler{position:relative;margin:0 auto;width:calc(var(--page-w) * var(--preview-zoom));height:1px}
+/* The preview is scaled with a transform, never with CSS zoom: zoom rounds every
+   block's position to device pixels, so a zoomed sheet is a few pixels taller
+   than the printed one and the last lines of a column get clipped. A transform
+   scales the exact layout that is printed. */
+.pages{position:absolute;left:0;top:0;margin:0;width:var(--page-w);transform-origin:top left}
 .page{
   position:relative;background:var(--sheet-bg);color:#000;
   width:var(--page-w);height:var(--page-h);
@@ -641,7 +647,9 @@ body.outline-closed .outline-pane{display:none}
   .pane-actions .btn{width:30px;padding:0}
   .preview-toolbar{align-items:center;width:100%;max-width:100%;flex-wrap:wrap;row-gap:6px}
   .preview-toolbar .spacer{display:none}
-  .preview-toolbar .btn{margin-left:auto}
+  .preview-toolbar>.btn{margin-left:auto}
+  .toolbar-actions{flex:1 1 auto;margin-left:0}
+  .toolbar-actions .btn{flex:1 1 0}
 }
 @media (max-width:480px){
   .brand-copy{display:none}
@@ -655,7 +663,8 @@ body.outline-closed .outline-pane{display:none}
   .app-header,.inspector,.editor-pane,.preview-toolbar,.toast,.fatal-error,.outline-pane{display:none !important}
   main{display:block}
   .preview-pane{overflow:visible;padding:0;background:#fff;background-image:none}
-  .pages{zoom:1 !important;width:auto;margin:0}
+  .pages-scaler{width:auto !important;height:auto !important}
+  .pages{position:static !important;transform:none !important;width:auto;margin:0}
   .page{box-shadow:none;margin:0;border-radius:0;page-break-after:always;break-after:page}
   .page:last-child{page-break-after:auto;break-after:auto}
   .overflow-note{outline:none}
@@ -1164,6 +1173,7 @@ $$\vec{F}=m\vec{a}$$
   <section class="preview-pane" id="preview-pane" aria-label="Rendered sheet preview">
     <div class="preview-toolbar">
       <span class="spacer"></span>
+      <div class="toolbar-actions">
       <button class="btn" id="btn-share" title="Send the finished PDF to someone">
         <svg class="icon" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m8 7 4-3 4 3"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
         <span class="btn-label">Share</span>
@@ -1172,8 +1182,9 @@ $$\vec{F}=m\vec{a}$$
         <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>
         <span class="btn-label">Export</span>
       </button>
+      </div>
     </div>
-    <div class="pages" id="pages"></div>
+    <div class="pages-scaler" id="pages-scaler"><div class="pages" id="pages"></div></div>
   </section>
 </main>
 <dialog id="notesdlg" aria-label="Your notes">
@@ -1957,6 +1968,18 @@ function syncZoomControl(){
   if (output) output.textContent = Math.round(S.zoom * 100) + "%";
 }
 
+/* Scale the preview with a transform and give the wrapper the scaled size, so
+   the sheet keeps the exact layout it will be printed with. */
+function applyZoomScale(){
+  if (!pagesEl) return;
+  const z = Number(S.zoom) > 0 ? Number(S.zoom) : 1;
+  pagesEl.style.transform = Math.abs(z - 1) < 0.0001 ? "" : "scale(" + z + ")";
+  const scaler = $("#pages-scaler");
+  if (!scaler) return;
+  const w = pagesEl.offsetWidth || 0, h = pagesEl.offsetHeight || 0;
+  scaler.style.width = Math.round(w * z) + "px";
+  scaler.style.height = Math.round(h * z) + "px";
+}
 function applyCSSVars(){
   document.documentElement.dataset.theme = S.uiTheme === "dark" ? "dark" : "light";
   if (S.zoomMode === "fit") S.zoom = calculateFitZoom();
@@ -1992,8 +2015,8 @@ function applyCSSVars(){
   };
   r.setProperty("--sheet-font", SHEET_FONTS[S.fontFamily] || SHEET_FONTS.serif);
 
-  pagesEl.style.zoom = S.zoom;
   r.setProperty("--preview-zoom", S.zoom);
+  applyZoomScale();
   syncZoomControl();
 
   const st = document.getElementById("pagesize-style") || document.createElement("style");
@@ -2215,10 +2238,10 @@ function groupTopics(blocks, auto){
 
 function paginate(contentRoot){
   // Measure at true print scale. Chromium's rect geometry under CSS `zoom`
-  // is not a reliable basis for pagination; restoring the preview zoom at
-  // the end keeps the visible page breaks identical to the exported PDF.
-  const previewZoom = S.zoom;
-  pagesEl.style.zoom = 1;
+  // is not a reliable basis for pagination. The preview is transform-scaled and
+  // clientHeight is not scaled, so the transform is switched off while packing;
+  // applyZoomScale() puts the scale back when the pack is done.
+  pagesEl.style.transform = "none";
   pagesEl.innerHTML = "";
   let pageNo = 1;
   let cols = newPage(pagesEl, pageNo), ci = 0;
@@ -2255,9 +2278,10 @@ function paginate(contentRoot){
   const allPages = [...pagesEl.querySelectorAll(".page")];
   const last = allPages[allPages.length-1];
   if (allPages.length > 1 && last && ![...last.querySelectorAll(".col")].some(c => c.childNodes.length)) last.remove();
-  fitWideMath();
-  pagesEl.style.zoom = previewZoom;
-  updateStats();
+  fitWideMath();        // shrinking wide maths changes heights, so it runs first
+  enforceColumnFit();
+  applyZoomScale();     // restore the preview scale for the finished pack
+  updateStats();        // also re-sizes the scaled wrapper
 
   /* A topic enters the current column only when it fits the remaining space
      completely; otherwise it moves — whole — to the top of the next column.
@@ -2450,6 +2474,80 @@ function paginate(contentRoot){
   }
 }
 
+/* Last line of defence against clipped text. The packer works from the boxes it
+   can see; ink can still reach past a column's last box (tall fractions, very
+   tight line-height, a table's final row, sub/superscripts). Anything that ends
+   up below a column is handed to the next column here — silently losing content
+   is never acceptable, and a slightly short column is invisible. */
+function enforceColumnFit(){
+  const trueBottom = (col) => {
+    const cb = col.getBoundingClientRect();
+    let deepest = 0;
+    for (const el of col.querySelectorAll("*")){
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden") continue;
+      if (el.closest("svg") || (el.classList && el.classList.contains("katex-mathml"))) continue;
+      const r = el.getBoundingClientRect();
+      if (r.height && r.bottom - cb.top > deepest) deepest = r.bottom - cb.top;
+    }
+    const w = document.createTreeWalker(col, NodeFilter.SHOW_TEXT);
+    let tn;
+    while ((tn = w.nextNode())){
+      if (!tn.textContent.trim()) continue;
+      const rg = document.createRange(); rg.selectNodeContents(tn);
+      for (const r of rg.getClientRects()) if (r.height && r.bottom - cb.top > deepest) deepest = r.bottom - cb.top;
+    }
+    return deepest;
+  };
+  const columnAt = (pi, ci) => {
+    const page = pagesEl.querySelectorAll(".page")[pi];
+    if (!page) return null;
+    const cols = [...page.querySelectorAll(".col")];
+    if (ci < cols.length - 1) return cols[ci + 1];
+    const nextPage = pagesEl.querySelectorAll(".page")[pi + 1];
+    if (nextPage) return nextPage.querySelector(".col");
+    const made = newPage(pagesEl, pagesEl.querySelectorAll(".page").length + 1);
+    return made[0];
+  };
+  const pages = () => [...pagesEl.querySelectorAll(".page")];
+  for (let pi = 0; pi < pages().length; pi++){
+    const cols = [...pagesEl.querySelectorAll(".page")[pi].querySelectorAll(".col")];
+    for (let ci = 0; ci < cols.length; ci++){
+      const col = pagesEl.querySelectorAll(".page")[pi].querySelectorAll(".col")[ci];
+      let guard = 0;
+      while (guard++ < 80){
+        const over = trueBottom(col) - col.clientHeight;
+        if (over <= 0.5 || !col.lastElementChild) break;
+        const last = col.lastElementChild;
+        const target = columnAt(pi, ci);
+        if (!target) break;
+        if (col.children.length > 1){ target.insertBefore(last, target.firstChild); continue; }
+        /* one over-tall block left: move its tail, keeping the head in place */
+        if (last.children.length > 1){
+          let moved = 0;
+          while (last.children.length > 1 && moved < 40){
+            target.insertBefore(last.lastElementChild, target.firstChild);
+            moved++;
+            if (trueBottom(col) - col.clientHeight <= 0.5) break;
+          }
+          if (last.children.length <= 1 && trueBottom(col) - col.clientHeight > 0.5){
+            target.insertBefore(last, target.firstChild);
+          }
+        }
+        break;
+      }
+    }
+  }
+  /* nothing should be left holding a page open on its own */
+  const all = pages();
+  if (all.length > 1){
+    all.forEach(pg => {
+      const cols = [...pg.querySelectorAll(".col")];
+      if (cols.every(c => !c.childNodes.length)) pg.remove();
+    });
+  }
+}
+
 /* shrink any display equation / table wider than its column */
 function fitWideMath(){
   document.querySelectorAll(".col .math-display").forEach(d => {
@@ -2499,6 +2597,7 @@ function updateStats(){
   const badge = $("#errbadge");
   if (renderErrors.length){ badge.style.display = "inline-block"; badge.textContent = "⚠ " + renderErrors.length + " rendering problem" + (renderErrors.length===1?"":"s"); }
   else badge.style.display = "none";
+  applyZoomScale();     // the wrapper must know the new sheet height
   syncHeaderHeight();
 }
 $("#errbadge").addEventListener("click", () => {
@@ -2548,11 +2647,7 @@ async function renderNow(){
   await imagesReady(root, myErrors, () => mySequence === renderSequence);
   if (mySequence !== renderSequence) return false; // a newer edit superseded this render
   renderErrors = myErrors;
-  try {
-    paginate(root);
-  } finally {
-    pagesEl.style.zoom = S.zoom; // paginate measures at zoom 1; always restore, even on error
-  }
+  paginate(root);
   if (anchorPending){
     restorePreviewAnchor();
     /* the browser may lay out once more after zoom is restored */
@@ -2594,7 +2689,8 @@ function computePreviewAnchor(){
     if (r.top <= line + 2 && r.top > bestTop){ best = h; bestTop = r.top; }
   }
   if (!best) best = heads[0], bestTop = best.getBoundingClientRect().top;
-  return { index: heads.indexOf(best), text: best.textContent.trim(), offset: Math.round(bestTop - line) };
+  return { index: heads.indexOf(best), text: best.textContent.trim(), offset: Math.round(bestTop - line),
+           atTop: scrollPosOf(sc) < 2 };
 }
 function applyPreviewAnchor(a){
   if (!a) return;
@@ -2602,6 +2698,9 @@ function applyPreviewAnchor(a){
   if (!pv) return;
   const sc = currentScroller();
   if (!sc) return;
+  /* reading from the very top: stay at the very top, never scroll down to line
+     the first heading up with the edge */
+  if (a.atTop){ scrollToPos(sc, 0); return; }
   const heads = [...pv.querySelectorAll("h1,h2,h3,h4,h5,h6")];
   if (!heads.length) return;
   let target = heads[a.index];
@@ -2630,7 +2729,6 @@ function restorePreviewAnchor(){
 function showFatalError(error){
   const message = error && error.message ? error.message : String(error || "Unknown render error");
   renderErrors = [message];
-  pagesEl.style.zoom = 1;
   pagesEl.innerHTML = '<div class="fatal-error" role="alert"><strong>The preview could not be rendered.</strong>' +
     escapeHtml(message) + '<br>Your editor content is untouched. Fix the problem above, then edit or reload to render again.</div>';
   try { updateStats(); } catch(_){}
@@ -3039,14 +3137,19 @@ async function buildPdfBlob(){
   if (!pages.length) throw new Error("Nothing to export");
   /* WYSIWYG: the preview is scaled with CSS zoom, which confuses the copy the
      rasteriser makes, so it is briefly neutralised (behind a scrim). */
-  const scale = pages.length <= 2 ? 2 : pages.length <= 5 ? 1.6 : 1.25;
-  const prevZoom = pagesEl.style.zoom;
+  /* Shared PDFs are read on phones, so they need real resolution: a 2x raster is
+     only ~190 dpi and looks soft the moment you pinch in. Text sheets are stored
+     losslessly (a text page compresses well as PNG and stays crisp); sheets with
+     photos stay JPEG, where PNG would balloon the file. */
+  const hasPhoto = !!pagesEl.querySelector("img");
+  const scale = pages.length <= 2 ? 3 : pages.length <= 5 ? 2.5 : 2;
+  const prevTransform = pagesEl.style.transform;
   const bg = getComputedStyle(document.documentElement).getPropertyValue("--sheet-bg").trim() || "#ffffff";
   /* rendering at 100% collapses the preview's layout and the flush above
      re-paginates it — both would drop the reader back to the top */
   applyPreviewAnchor(savedAnchor);
   pdfBusy(true, "Preparing PDF…");
-  pagesEl.style.zoom = "1";
+  pagesEl.style.transform = "none";   // rasterise the real, unscaled page
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   try {
     const a4 = S.paper !== "letter";
@@ -3062,11 +3165,12 @@ async function buildPdfBlob(){
         windowWidth: document.documentElement.clientWidth,
       });
       if (i) pdf.addPage([wmm, hmm], "portrait");
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.88), "JPEG", 0, 0, wmm, hmm, undefined, "FAST");
+      if (hasPhoto) pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, wmm, hmm, undefined, "FAST");
+      else pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, wmm, hmm, undefined, "FAST");
     }
     return { blob: pdf.output("blob"), name: (safeFileName((curNote && curNote.title)) || "g-note") + ".pdf", pages: pages.length };
   } finally {
-    pagesEl.style.zoom = prevZoom;
+    pagesEl.style.transform = prevTransform;
     applyPreviewAnchor(savedAnchor);
     requestAnimationFrame(() => applyPreviewAnchor(savedAnchor));   // in case the browser lays out again
     pdfBusy(false);
@@ -3891,13 +3995,21 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
     }
     const sc = scroller();
     const r = h.getBoundingClientRect();
-    const top = Math.max(0, scrollTopOf(sc) + (r.top - readingLine(sc)));
-    const smooth = !reduceMotion && !(opts && opts.instant);
-    try {
-      if (sc === preview && preview.scrollTo) preview.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
-      else if (sc !== preview && typeof window.scrollTo === "function") window.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
-      else sc.scrollTop = top;
-    } catch(_) { sc.scrollTop = top; }
+    /* On a phone the panes are stacked, so the caret in the editor and the
+       heading in the preview cannot both be positioned at once — and focusing
+       the editor wins, which used to cancel this scroll halfway. There the tap
+       means "take me to this part of my text", so the caret is the destination
+       and the preview is left where it is. */
+    const stacked = !!(window.matchMedia && window.matchMedia(NARROW).matches);
+    if (!stacked){
+      const top = Math.max(0, scrollTopOf(sc) + (r.top - readingLine(sc)));
+      const smooth = !reduceMotion && !(opts && opts.instant);
+      try {
+        if (sc === preview && preview.scrollTo) preview.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
+        else if (sc !== preview && typeof window.scrollTo === "function") window.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
+        else sc.scrollTop = top;
+      } catch(_) { sc.scrollTop = top; }
+    }
     flash(h);
     jumpEditor(entry.src);              // put the caret on that section in the editor
     const idx = items.indexOf(entry);
