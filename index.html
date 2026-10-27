@@ -201,6 +201,8 @@ body.design-closed .inspector{display:none}
   display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px;
 }
 .editor-footer .dot{width:6px;height:6px;border-radius:50%;background:#3c8c5a;flex:0 0 auto}
+.editor-footer .dot.bad{background:#c0392b}
+.editor-footer #save-state.bad{color:#a3281c;font-weight:650}
 .editor-footer .editor-meta{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
 body.dragging .editor-pane::after{
   content:"Drop to add";position:absolute;inset:52px 12px 44px;border:1.5px dashed var(--accent);
@@ -532,6 +534,7 @@ html.booting .inspector,html.booting .outline-pane{transition:none !important}
 /* Share: full-screen scrim while the PDF is rendered */
 .pdf-busy{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
   background:rgba(43,32,14,.42)}
+#pdf-cancel{margin-left:4px}
 .pdf-busy-card{display:flex;align-items:center;gap:11px;background:#fffdf8;color:#25231f;
   border:1px solid var(--line);border-radius:14px;padding:15px 20px;
   font:600 13px/1.3 inherit;box-shadow:0 18px 45px rgba(32,29,24,.28)}
@@ -906,8 +909,8 @@ $$\vec{F}=m\vec{a}$$
     </div>
 
     <div class="editor-footer">
-      <span class="dot" aria-hidden="true"></span>
-      <span>Saved in this browser · Paste or drop images &amp; .md files</span>
+      <span class="dot" id="save-dot" aria-hidden="true"></span>
+      <span id="save-state" role="status">Saved in this browser · Paste or drop images &amp; .md files</span>
       <span class="editor-meta" id="editor-meta">0 lines</span>
     </div>
   </section>
@@ -1234,21 +1237,37 @@ let storageWarningShown = false;
 function lsGet(key){
   try { return localStorage.getItem(key); } catch(e) { return null; }
 }
+/* Autosave failures must never be silent: the old code said "Saved in this
+   browser" no matter what, so a full storage quota could lose a whole note on
+   the next refresh. The truth now lives in the footer and stays there. */
+let saveFailed = false;
+let lastWrittenValue = null;   // what this tab last persisted to the content mirror
+function setSaveState(ok){
+  if (saveFailed === !ok) return;
+  saveFailed = !ok;
+  const dot = document.getElementById("save-dot"), label = document.getElementById("save-state");
+  if (dot) dot.classList.toggle("bad", !ok);
+  if (label){
+    label.textContent = ok
+      ? "Saved in this browser · Paste or drop images & .md files"
+      : "NOT saved — browser storage is full or blocked. Use Save .md to keep a copy.";
+    label.classList.toggle("bad", !ok);
+  }
+  if (!ok) setTimeout(() => { try { toast("Autosave unavailable (storage full or blocked). Use Save .md to keep a copy."); } catch(_){} }, 0);
+}
 function lsSet(key, value, warnOnFailure = false){
   try {
     localStorage.setItem(key, value);
-    storageWarningShown = false;
+    if (warnOnFailure) setSaveState(true);
     return true;
   } catch(e) {
-    if (warnOnFailure && !storageWarningShown){
-      storageWarningShown = true;
-      setTimeout(() => { try { toast("Autosave unavailable (browser storage is full or blocked). Use Save .md to keep a copy."); } catch(_){} }, 0);
-    }
+    if (warnOnFailure) setSaveState(false);
     return false;
   }
 }
 function saveContent(){
   const ok = lsSet(LS_CONTENT, editor.value, true); // immediate mirror — a refresh can never lose typed work
+  if (ok) lastWrittenValue = editor.value;
   scheduleNotesSave();                              // the notes library write is throttled + flushed on hide
   return ok;
 }
@@ -3111,20 +3130,30 @@ function loadPdfLibs(){
   }
   return PDF_LIBS;
 }
-function pdfBusy(show, msg){
+/* A long sheet can take a while to rasterise page by page, so the scrim carries
+   a Cancel button: the loop between pages checks the flag and bails out cleanly
+   instead of leaving someone stuck behind an overlay they cannot dismiss. */
+let exportCancel = false;
+function pdfBusy(show, msg, cancellable){
   let el = $("#pdf-busy");
-  if (!show){ if (el) el.remove(); return; }
+  if (!show){ if (el) el.remove(); exportCancel = false; return; }
   if (!el){
     el = document.createElement("div");
     el.id = "pdf-busy";
     el.className = "pdf-busy";
     el.setAttribute("role", "status");
     el.setAttribute("aria-live", "polite");
-    el.innerHTML = '<div class="pdf-busy-card"><span class="pdf-spin" aria-hidden="true"></span><span id="pdf-busy-msg"></span></div>';
+    el.innerHTML = '<div class="pdf-busy-card"><span class="pdf-spin" aria-hidden="true"></span><span id="pdf-busy-msg"></span>' +
+                   '<button type="button" class="btn small ghost" id="pdf-cancel" hidden>Cancel</button></div>';
     document.body.appendChild(el);
+    const btn = el.querySelector("#pdf-cancel");
+    if (btn) btn.addEventListener("click", () => { exportCancel = true; btn.disabled = true; btn.textContent = "Cancelling…"; });
   }
-  const m = $("#pdf-busy-msg");
+  const m = $("#pdf-busy-msg"), c = $("#pdf-cancel");
   if (m && msg) m.textContent = msg;
+  if (c) c.hidden = !cancellable;
+  if (cancellable) c.disabled = false, c.textContent = "Cancel";
+  if (show) exportCancel = false;
 }
 async function buildPdfBlob(){
   /* captured first: flushing the render (below) re-paginates the sheet, which
@@ -3142,13 +3171,30 @@ async function buildPdfBlob(){
      losslessly (a text page compresses well as PNG and stays crisp); sheets with
      photos stay JPEG, where PNG would balloon the file. */
   const hasPhoto = !!pagesEl.querySelector("img");
-  const scale = pages.length <= 2 ? 3 : pages.length <= 5 ? 2.5 : 2;
+  /* Long sheets are rasterised page by page, so a 20-page book would spend
+     minutes on a phone. Quality stays 3x where it matters (one or two pages,
+     which is what a cheat sheet almost always is) and steps down with length;
+     phones and tablets get a lower ceiling, and the pixel budget is capped so a
+     huge paper size can never allocate a canvas the browser refuses. */
+  const coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+  let scale = pages.length <= 2 ? 3 : pages.length <= 6 ? 2.25 : 1.75;
+  if (coarse) scale = Math.min(scale, 2);
+  const first = pages[0];
+  if (first){
+    const w = first.offsetWidth || 794, h = first.offsetHeight || 1123;
+    const budget = 16e6;                       // iOS caps canvases near 16.7 MP
+    scale = Math.max(1, Math.min(scale, Math.sqrt(budget / (w * h))));
+    scale = Math.round(scale * 100) / 100;
+  }
+  /* very long sheets also switch to JPEG: lossless pages would add tens of MB */
+  const lossless = !hasPhoto && pages.length <= 6;
   const prevTransform = pagesEl.style.transform;
   const bg = getComputedStyle(document.documentElement).getPropertyValue("--sheet-bg").trim() || "#ffffff";
   /* rendering at 100% collapses the preview's layout and the flush above
      re-paginates it — both would drop the reader back to the top */
   applyPreviewAnchor(savedAnchor);
-  pdfBusy(true, "Preparing PDF…");
+  exportCancel = false;
+  pdfBusy(true, pages.length > 2 ? "Preparing PDF… " + pages.length + " pages" : "Preparing PDF…", pages.length > 2);
   pagesEl.style.transform = "none";   // rasterise the real, unscaled page
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   try {
@@ -3158,15 +3204,16 @@ async function buildPdfBlob(){
     const title = (curNote && curNote.title) || "G/note sheet";
     try { pdf.setProperties({ title, creator: "G/note", subject: "Cheat sheet" }); } catch(_){}
     for (let i = 0; i < pages.length; i++){
-      pdfBusy(true, "Preparing PDF… page " + (i + 1) + " of " + pages.length);
+      if (exportCancel) throw new Error("cancelled");
+      pdfBusy(true, "Preparing PDF… page " + (i + 1) + " of " + pages.length, true);
       await new Promise(r => setTimeout(r, 30));         // let that message paint
       const canvas = await html2canvas(pages[i], {
         scale, backgroundColor: bg, logging: false, useCORS: true, imageTimeout: 20000,
         windowWidth: document.documentElement.clientWidth,
       });
       if (i) pdf.addPage([wmm, hmm], "portrait");
-      if (hasPhoto) pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, wmm, hmm, undefined, "FAST");
-      else pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, wmm, hmm, undefined, "FAST");
+      if (lossless) pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, wmm, hmm, undefined, "FAST");
+      else pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, wmm, hmm, undefined, "FAST");
     }
     return { blob: pdf.output("blob"), name: (safeFileName((curNote && curNote.title)) || "g-note") + ".pdf", pages: pages.length };
   } finally {
@@ -3298,19 +3345,39 @@ $("#btn-share").addEventListener("click", async () => {
     }
     showShareCard({ blob, file, name, title, pages, canFile });
   } catch(e){
-    console.error(e);
-    toast("Could not build the PDF — try Export instead");
+    if (String(e && e.message) === "cancelled"){ toast("PDF build cancelled"); }
+    else { console.error(e); toast("Could not build the PDF — try Export instead"); }
   } finally {
+    exportCancel = false;
     btn.disabled = false;
     if (label) label.textContent = "Share";
   }
 });
-/* warm the PDF engine while the app is idle, so Share starts instantly */
+/* Idle work, done once the sheet is on screen: warm the PDF engine so Share
+   starts instantly, pull the sheet fonts in so a slow connection never swaps
+   them under a finished layout, and register the offline shell. */
 try {
-  const warm = () => { loadPdfLibs().catch(() => {}); };
+  const warm = () => {
+    loadPdfLibs().catch(() => {});
+    try {
+      const faces = [S.fontFamily === "sans" ? "Liberation Sans" : S.fontFamily === "georgia" ? "Georgia" : "Liberation Serif"];
+      if (document.fonts && document.fonts.load) faces.forEach(f => document.fonts.load('12px "' + f + '"').catch(() => {}));
+    } catch(_){}
+    registerOfflineShell();
+  };
   if ("requestIdleCallback" in window) requestIdleCallback(warm, { timeout: 4000 });
   else setTimeout(warm, 2500);
 } catch(_){}
+/* The app is fully static, so a tiny service worker makes it work with no
+   connection after the first visit. It never pins an old build: navigations are
+   network-first, so online visitors always get the newest index.html. */
+function registerOfflineShell(){
+  try {
+    if (!("serviceWorker" in navigator)) return;
+    if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  } catch(_){}
+}
 
 function toast(msg){
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
@@ -3345,6 +3412,24 @@ function flushEverything(){
 }
 window.addEventListener("pagehide", flushEverything);
 window.addEventListener("beforeunload", flushEverything);
+/* Two tabs used to fight silently: whichever one saved last won, and closing a
+   stale tab could overwrite newer work. Now the tab with nothing unsaved adopts
+   what the other one wrote, and a tab with unsaved edits is warned instead of
+   being clobbered without a word. */
+lastWrittenValue = editor.value;
+window.addEventListener("storage", e => {
+  if (e.key !== LS_CONTENT || e.newValue === null) return;
+  if (e.newValue === editor.value || e.newValue === lastWrittenValue) return;
+  if (editor.value === lastWrittenValue){
+    editor.value = e.newValue;
+    committedBase = e.newValue;
+    lastWrittenValue = e.newValue;
+    queueRender();
+    try { toast("This note was updated in another tab."); } catch(_){}
+  } else {
+    try { toast("Another tab changed this note — your unsaved edits here will overwrite it."); } catch(_){}
+  }
+});
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushEverything(); });
 
 /* ---------------- editor find bar (Ctrl/Cmd+F) ----------------
@@ -3466,7 +3551,8 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 
   function showCount(empty){
     countEl.classList.toggle("empty", !!empty);
-    countEl.textContent = matches.length ? (index + 1) + "/" + matches.length : "0/0";
+    const capped = matches.length >= MAX_MATCHES;
+    countEl.textContent = matches.length ? (index + 1) + "/" + matches.length + (capped ? "+" : "") : "0/0";
     countEl.title = matches.length
       ? matches.length + (matches.length === 1 ? " match" : " matches") + (matches.length >= MAX_MATCHES ? " (count capped)" : "")
       : (input.value ? "No matches" : "");
