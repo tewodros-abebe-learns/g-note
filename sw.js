@@ -114,8 +114,11 @@ async function cacheFirst(request){
   const cache = await caches.open(CACHE);
   const cached = await cache.match(request, { ignoreSearch: true });
   if (cached){
-    // refresh in the background so a later offline visit has the newest copy
-    fetch(request).then(r => { if (r && r.ok) cache.put(request, r.clone()); }).catch(() => {});
+    // refresh in the background so a later offline visit has the newest copy —
+    // but not while offline, where it can only fail and litter the console
+    if (typeof navigator === "undefined" || navigator.onLine !== false){
+      fetch(request).then(r => { if (r && r.ok) cache.put(request, r.clone()); }).catch(() => {});
+    }
     return cached;
   }
   try {
