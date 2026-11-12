@@ -61,6 +61,16 @@ playfair_new = '\n'.join(
     for w in (500, 600))
 assert playfair_old in css
 css = css.replace(playfair_old, playfair_new)
+# Google Sans is bundled in the root build; the CDN build points at the same
+# Fontsource files (OFL-1.1) instead of shipping vendor/.
+for _w, _style in [('400', 'normal'), ('500', 'normal'), ('700', 'normal'), ('400', 'italic'), ('700', 'italic')]:
+    _local = (f'@font-face{{font-family:"Google Sans";src:url("vendor/fonts/GoogleSans-{_w}-{_style}.woff2") '
+              f'format("woff2");font-weight:{_w};font-style:{_style};font-display:swap}}')
+    _cdn = (f'@font-face{{font-family:"Google Sans";src:url("{FS}/google-sans@latest/latin-{_w}-{_style}.woff2") '
+            f'format("woff2");font-weight:{_w};font-style:{_style};font-display:swap}}')
+    assert _local in css, _local
+    css = css.replace(_local, _cdn)
+
 assert 'vendor/' not in css
 
 marker = '/* ============================= Preview canvas'

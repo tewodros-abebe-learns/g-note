@@ -21,6 +21,12 @@
 @font-face{font-family:"Liberation Sans";src:url("vendor/fonts/LiberationSans-Italic.woff2") format("woff2");font-weight:400;font-style:italic;font-display:swap}
 @font-face{font-family:"Liberation Sans";src:url("vendor/fonts/LiberationSans-BoldItalic.woff2") format("woff2");font-weight:700;font-style:italic;font-display:swap}
 @font-face{font-family:"Plus Jakarta Sans";src:url("vendor/fonts/PlusJakartaSans-Variable.woff2") format("woff2");font-weight:200 800;font-style:normal;font-display:swap}
+/* Google Sans ships under the SIL Open Font License (see GoogleSans-OFL.txt). */
+@font-face{font-family:"Google Sans";src:url("vendor/fonts/GoogleSans-400-normal.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"Google Sans";src:url("vendor/fonts/GoogleSans-500-normal.woff2") format("woff2");font-weight:500;font-style:normal;font-display:swap}
+@font-face{font-family:"Google Sans";src:url("vendor/fonts/GoogleSans-700-normal.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"Google Sans";src:url("vendor/fonts/GoogleSans-400-italic.woff2") format("woff2");font-weight:400;font-style:italic;font-display:swap}
+@font-face{font-family:"Google Sans";src:url("vendor/fonts/GoogleSans-700-italic.woff2") format("woff2");font-weight:700;font-style:italic;font-display:swap}
 @font-face{font-family:"Playfair Display";src:url("vendor/fonts/PlayfairDisplay-Italic-Variable.woff2") format("woff2");font-weight:400 900;font-style:italic;font-display:swap}
 
 :root{
@@ -796,7 +802,7 @@ body.outline-closed .outline-pane{display:none}
           <li><b>Tables:</b> normal Markdown (GFM) tables. Narrow (2–3 col) tables fit best; wide tables auto-shrink/wrap.</li>
           <li><b>Images:</b> <code>![caption](https://…)</code>, or use the image button, or <b>paste / drag an image</b> into the editor — it embeds automatically and shows up as a short <code>![name](gnote-img:…)</code> tag in the editor (the preview and the PDF still show the full image).</li>
           <li><b>Links:</b> <code>[text](https://…)</code> — clickable in the exported PDF.</li>
-          <li><b>Breaks:</b> <code>&lt;!-- column-break --&gt;</code> and <code>&lt;!-- page-break --&gt;</code> on their own line force a new column/page; <code>&lt;!-- keep-topic --&gt;</code> above a section keeps that whole section in one column (the ▤ button in the editor inserts it at your cursor line).</li>
+          <li><b>Breaks:</b> <code>&lt;!-- column-break --&gt;</code> and <code>&lt;!-- page-break --&gt;</code> on their own line force a new column/page (with one column a column break starts a new page); <code>&lt;!-- keep-topic --&gt;</code> above a section keeps that whole section in one column (the ▤ button in the editor inserts it at your cursor line).</li>
           <li><b>Raw HTML</b> (e.g. an inline <code>&lt;svg&gt;</code> diagram) passes through after sanitising.</li>
         </ul>
         <h3>Design controls</h3>
@@ -950,6 +956,7 @@ $$\vec{F}=m\vec{a}$$
         <div class="field">
           <div class="field-head"><label>Columns</label></div>
           <div class="segmented" id="seg-cols" role="group" aria-label="Number of columns">
+            <button type="button" data-value="1" title="One column — full-width lines, good for prose and long equations">1</button>
             <button type="button" data-value="2">2</button>
             <button type="button" data-value="3">3</button>
             <button type="button" data-value="4">4</button>
@@ -1006,8 +1013,9 @@ $$\vec{F}=m\vec{a}$$
             <button type="button" data-value="sans">Sans</button>
             <button type="button" data-value="georgia">Georgia</button>
             <button type="button" data-value="jakarta">Jakarta</button>
+            <button type="button" data-value="google" title="Google Sans — geometric sans, bundled locally">Google Sans</button>
           </div>
-          <div class="field-hint">Serif is the exact GPAI original (Liberation Serif). Formulas always typeset in KaTeX.</div>
+          <div class="field-hint">Serif is the exact GPAI original (Liberation Serif). Formulas always typeset in KaTeX; fonts are bundled, so every face works offline and in the PDF.</div>
         </div>
 
         <div class="field">
@@ -1949,7 +1957,7 @@ function normalizeSettings(raw){
     out[key] = Math.round(out[key] / 50) * 50;
   });
   const cols = Number(src.cols);
-  out.cols = [2,3,4].includes(cols) ? cols : defaultSettings.cols;
+  out.cols = [1,2,3,4].includes(cols) ? cols : defaultSettings.cols;
   out.paper = src.paper === "letter" ? "letter" : "a4";
   const bool = (value, fallback) => value === true || value === "true" || value === 1 ? true :
     (value === false || value === "false" || value === 0 ? false : fallback);
@@ -1959,13 +1967,35 @@ function normalizeSettings(raw){
   out.topicFit = bool(src.topicFit, defaultSettings.topicFit);
   out.pageno = bool(src.pageno, defaultSettings.pageno);
   out.footer = typeof src.footer === "string" ? src.footer.slice(0, 300) : "";
-  out.fontFamily = ["serif","sans","georgia","jakarta"].includes(src.fontFamily) ? src.fontFamily : defaultSettings.fontFamily;
+  out.fontFamily = ["serif","sans","georgia","jakarta","google"].includes(src.fontFamily) ? src.fontFamily : defaultSettings.fontFamily;
   out.sheetBg = (typeof src.sheetBg === "string" && /^#[0-9a-f]{6}$/i.test(src.sheetBg.trim()))
     ? src.sheetBg.trim().toLowerCase() : defaultSettings.sheetBg;
   out.zoomMode = src.zoomMode === "manual" ? "manual" : "fit";
   out.uiTheme = src.uiTheme === "dark" ? "dark" : "light";
   out.density = String(out.lineHeight);
   return out;
+}
+/* Locally bundled webfonts, by setting value. Pagination measures real text, so
+   a face that is still loading would pack the columns against fallback metrics;
+   renderNow waits for these faces before it measures anything. */
+const SHEET_WEB_FONTS = { jakarta: '"Plus Jakarta Sans"', google: '"Google Sans"' };
+function sheetFontFamilyOf(value){
+  const map = {
+    serif: "Liberation Serif", sans: "Liberation Sans",
+    georgia: "Georgia", jakarta: "Plus Jakarta Sans", google: "Google Sans"
+  };
+  return map[value] || "Liberation Serif";
+}
+async function ensureSheetFontReady(){
+  const fam = SHEET_WEB_FONTS[S.fontFamily];
+  if (!fam || !document.fonts || !document.fonts.load) return;
+  try {
+    await Promise.all([
+      document.fonts.load('400 12px ' + fam),
+      document.fonts.load('700 12px ' + fam),
+      document.fonts.load('italic 400 12px ' + fam)
+    ]).catch(() => {});
+  } catch(_){}
 }
 function trimNum(value, decimals = 2){
   const n = Number(value);
@@ -2149,7 +2179,10 @@ function applyCSSVars(){
     serif: '"Liberation Serif","Times New Roman",Times,serif',
     sans: '"Liberation Sans",Arial,"Helvetica Neue",sans-serif',
     georgia: 'Georgia,"Times New Roman",Times,serif',
-    jakarta: '"Plus Jakarta Sans","Liberation Sans",Arial,sans-serif'
+    jakarta: '"Plus Jakarta Sans","Liberation Sans",Arial,sans-serif',
+    /* Google Sans has no Ethiopic/Arabic coverage; the rest of the stack carries
+       those scripts instead of showing tofu. */
+    google: '"Google Sans","Liberation Sans",Arial,sans-serif'
   };
   r.setProperty("--sheet-font", SHEET_FONTS[S.fontFamily] || SHEET_FONTS.serif);
 
@@ -2728,7 +2761,7 @@ function updateStats(){
   const pgs = document.querySelectorAll("#pages .page").length;
   $("#stats").innerHTML = "<b>" + words.toLocaleString() + "</b> words · <b>" + formulas + "</b> formulas · <b>" + pgs + "</b> page" + (pgs===1?"":"s");
   const pageInfoEl = $("#pageinfo");
-  if (pageInfoEl) pageInfoEl.textContent = pgs + " page" + (pgs===1?"":"s") + " · " + S.cols + " columns · " + (S.paper==="letter"?"US Letter":"A4");
+  if (pageInfoEl) pageInfoEl.textContent = pgs + " page" + (pgs===1?"":"s") + " · " + S.cols + (S.cols===1?" column":" columns") + " · " + (S.paper==="letter"?"US Letter":"A4");
   const lines = text ? text.split("\n").length : 0;
   const meta = $("#editor-meta");
   if (meta) meta.textContent = lines.toLocaleString() + " line" + (lines===1?"":"s");
@@ -2778,6 +2811,7 @@ async function imagesReady(root, errors, isCurrent){
 let renderSequence = 0;
 async function renderNow(){
   const mySequence = ++renderSequence;
+  await ensureSheetFontReady();   // measure with the chosen face, not its fallback
   await IMG_READY;   // embedded-image tags resolve against the loaded browser store
   await imgEnsure(imgIdsIn(editor.value));   // page back in only what this note uses
   if (mySequence !== renderSequence) return false;
@@ -2951,7 +2985,11 @@ document.querySelectorAll(".segmented").forEach(group => {
     const btn = e.target.closest("button[data-value]");
     if (!btn) return;
     group.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
-    readControls(); queueRender();
+    readControls();
+    /* switching to a bundled webfont must not repaginate against the fallback
+       face and then reflow once the real one lands */
+    if (group.id === "seg-fontfamily") ensureSheetFontReady().then(() => queueRender());
+    else queueRender();
   });
 });
 
@@ -3547,10 +3585,7 @@ $("#btn-share").addEventListener("click", async () => {
 try {
   const warm = () => {
     loadPdfLibs().catch(() => {});
-    try {
-      const faces = [S.fontFamily === "sans" ? "Liberation Sans" : S.fontFamily === "georgia" ? "Georgia" : "Liberation Serif"];
-      if (document.fonts && document.fonts.load) faces.forEach(f => document.fonts.load('12px "' + f + '"').catch(() => {}));
-    } catch(_){}
+    ensureSheetFontReady();
     registerOfflineShell();
   };
   if ("requestIdleCallback" in window) requestIdleCallback(warm, { timeout: 4000 });

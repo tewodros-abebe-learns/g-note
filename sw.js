@@ -11,7 +11,7 @@
  *     makes vendor/ and the fonts instant on later visits.
  * Bump VERSION when the shell changes shape; old caches are dropped on activate.
  */
-const VERSION = "1";
+const VERSION = "2";   // v2 adds the Google Sans faces to the shell
 const CACHE = "gnote-shell-v" + VERSION;
 const CORE = [
   "./",
@@ -56,6 +56,11 @@ const FONTS = [
   "./vendor/fonts/LiberationSerif-Regular.woff2",
   "./vendor/fonts/PlayfairDisplay-Italic-Variable.woff2",
   "./vendor/fonts/PlusJakartaSans-Variable.woff2",
+  "./vendor/fonts/GoogleSans-400-normal.woff2",
+  "./vendor/fonts/GoogleSans-500-normal.woff2",
+  "./vendor/fonts/GoogleSans-700-normal.woff2",
+  "./vendor/fonts/GoogleSans-400-italic.woff2",
+  "./vendor/fonts/GoogleSans-700-italic.woff2",
 ];
 const NAV_TIMEOUT = 3500;      // slow network still gets a cached shell quickly
 
