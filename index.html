@@ -680,14 +680,23 @@ body.outline-closed .outline-pane{display:none}
 /* ============================= Print ============================= */
 @page{size:A4;margin:0}
 @media print{
-  body{background:#fff;display:block;overflow:visible}
-  .app-header,.inspector,.editor-pane,.preview-toolbar,.toast,.fatal-error,.outline-pane{display:none !important}
+  html,body{background:#fff;height:auto}
+  body{display:block;overflow:visible}
+  .app-header,.inspector,.editor-pane,.preview-toolbar,.toast,.fatal-error,.outline-pane,.editor-highlights{display:none !important}
   main{display:block}
   .preview-pane{overflow:visible;padding:0;background:#fff;background-image:none}
   .pages-scaler{width:auto !important;height:auto !important}
   .pages{position:static !important;transform:none !important;width:auto;margin:0}
   .page{box-shadow:none;margin:0;border-radius:0;page-break-after:always;break-after:page}
-  .pdf-busy,dialog#askdlg,toast{display:none !important}   /* never let an overlay reach paper */
+  /* Nothing but the sheet may reach paper. Dialogs are promoted to the browser's
+     top layer, so they escaped the rule below and were composited straight into
+     the PDF — together with their full-page blurred ::backdrop, painted over the
+     sheet. That is how a perfectly good preview turns into an unopenable or
+     blank-looking file, so every floating surface is named here and the
+     backdrops are switched off as well. */
+  dialog,.pdf-busy,.toast,.share-card,.helpbody{display:none !important}
+  dialog::backdrop{display:none !important;background:transparent !important;
+    -webkit-backdrop-filter:none !important;backdrop-filter:none !important}
   .page:last-child{page-break-after:auto;break-after:auto}
   .overflow-note{outline:none}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -826,6 +835,7 @@ body.outline-closed .outline-pane{display:none}
         </ul>
         <h3>Getting a perfect PDF</h3>
         <p>Click <b>Export</b> (above the preview), then in the print dialog choose <b>Save as PDF</b>, paper <b id="help-paper">A4</b>, <b>Margins: None</b>, <b>Scale: 100%</b>, enable <b>Background graphics</b>, disable headers/footers. The PDF keeps selectable text, vector math and clickable links.</p>
+        <p>If a saved file ever opens empty or shows 0 KB, the write came from the browser/OS rather than this page — use <b>Share</b> instead: it builds the PDF inside the page, so the file is always complete. Share is a raster copy (capped resolution), while Export keeps vector text.</p>
         <h3>GPAI formula block (copy the pattern)</h3>
         <pre>### The Net Force Formula
 $$\vec{F}=m\vec{a}$$
@@ -1489,7 +1499,23 @@ function renameCurrent(raw){
   curNote.title = t; saveNotesStore(); renderNotesList();
 }
 function safeFileName(name){
-  return String(name || "").replace(/[\\/:*?"<>|]/g, "").replace(/^\.+/, "").replace(/\.+$/, "").trim().slice(0, 80);
+  /* This string becomes the PDF's file name in two ways: the browser reads it
+     from document.title for print-to-PDF, and Share uses it for the download.
+     So it must survive an OS file system: no path characters, no control or
+     bidi-override characters (they can make a name look like a different file),
+     no zero-width joiners, no trailing dots/spaces, and never half of an emoji
+     at the cut point — a lone surrogate makes some file systems write a name
+     like "…\uFFFD" or refuse the file outright. */
+  let s = String(name == null ? "" : name)
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")         // C0/C1 controls
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g, "") // bidi + zero width
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/^[.\s]+/, "")
+    .replace(/[.\s]+$/, "")
+    .slice(0, 80);
+  if (/[\uD800-\uDBFF]$/.test(s)) s = s.slice(0, -1);      // never split a surrogate pair
+  return s.trim();
 }
 
 /* ---------------- undo / redo (3 steps each way, survives reloads) ---------------- */
@@ -2951,7 +2977,33 @@ function renderDelay(){
   if (renderCostMs > 600) return 450;
   return 220;
 }
+/* ---------------- Export/print freeze ----------------
+   Opening the browser's print preview emulates a different viewport, which fires
+   this page's own `resize` handlers — and those re-paginate, i.e. they destroy and
+   rebuild the very DOM the print compositor is snapshotting. Nothing may re-render
+   between the hand-off to the browser and the moment its dialog closes, so the
+   whole render pipeline is held still for that window instead of racing it. */
+var printHold = false, printHoldPending = false, printHoldWatchdog = null;
+function holdRenderForPrint(hold){
+  if (hold){
+    if (printHold) return;
+    printHold = true;
+    if (debounce){ clearTimeout(debounce); debounce = null; }   // drop the queued render
+    repaginateQueued = false;
+    renderSequence++;        // any render still awaiting a promise stops at its next checkpoint
+    /* safety valve: if a browser never fires afterprint, the editor must not
+       stay frozen for the rest of the session */
+    clearTimeout(printHoldWatchdog);
+    printHoldWatchdog = setTimeout(() => holdRenderForPrint(false), 120000);
+    return;
+  }
+  if (!printHold) return;
+  printHold = false;
+  clearTimeout(printHoldWatchdog); printHoldWatchdog = null;
+  if (printHoldPending){ printHoldPending = false; queueRender(); }  // sheet went stale while held
+}
 function queueRender(){
+  if (printHold){ printHoldPending = true; return; }   // refresh once, after the print dialog closes
   clearTimeout(debounce);
   debounce = setTimeout(async () => {
     debounce = null;
@@ -2966,6 +3018,7 @@ async function flushRender(){
   await renderNow();
 }
 function queueRepaginate(){
+  if (printHold){ printHoldPending = true; return; }
   if (repaginateQueued) return; repaginateQueued = true;
   setTimeout(() => { repaginateQueued = false; queueRender(); }, 60);
 }
@@ -3389,23 +3442,60 @@ $("#btn-download-md").addEventListener("click", () => {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 });
 const APP_TITLE = document.title;
+/* The sheet is only safe to hand to the browser once the chosen face is in, every
+   image is decoded and the layout has actually been painted. imagesReady() gives a
+   slow photo 2.5 s and then paginates provisionally, which is exactly what an
+   Export must not do — on a phone that is when a pasted photo is still arriving. */
+async function waitForSheetImages(budget){
+  const until = Date.now() + budget;
+  for (;;){
+    /* Only images that are still *arriving* are worth waiting for. One that is
+       complete with no pixels is broken (dead URL, blocked host) — it will never
+       improve, so Export must not sit on it. */
+    const pending = [...document.querySelectorAll("#pages img")].filter(i => !i.complete);
+    if (!pending.length) return true;
+    if (Date.now() > until) return false;
+    await new Promise(r => setTimeout(r, 120));
+  }
+}
+async function waitForPrintReady(budget){
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  try {
+    if (document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, wait(budget)]);
+  } catch(_){}
+  await waitForSheetImages(budget);
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));  // one painted frame
+}
 $("#btn-print").addEventListener("click", async () => {
   const btn = $("#btn-print");
   if (btn.disabled) return;
   if (pdfBuildInFlight){ toast("The PDF is being prepared — one moment."); return; }
+  if (typeof window.print !== "function"){
+    toast("This browser can't open a print dialog — use Share to get a PDF file.");
+    return;
+  }
   btn.disabled = true;
+  holdRenderForPrint(true);            // nothing may re-paginate while the browser captures
+  const slowNotice = setTimeout(() => toast("Waiting for the sheet to finish loading…"), 700);
   try {
-    await flushRender(); // never print a stale preview after a just-typed edit / slider move
+    await flushRender();               // never print a stale preview after a just-typed edit / slider move
+    await waitForPrintReady(10000);    // fonts in, slow images decoded, layout painted
+    await flushRender();               // paginate once more now that everything has landed
     document.title = safeFileName(curNote && curNote.title) || "g-note";   // nice default PDF filename = note name
     window.print();
   } catch(e) {
     reportRenderError(e);
   } finally {
+    clearTimeout(slowNotice);
+    holdRenderForPrint(false);
     document.title = APP_TITLE;
     btn.disabled = false;
   }
 });
-window.addEventListener("afterprint", () => { document.title = APP_TITLE; });
+/* Covers Ctrl/⌘+P as well: freeze the sheet for the capture, and keep the tab
+   title pointing at the note so the suggested file name is the note's name. */
+window.addEventListener("beforeprint", () => { holdRenderForPrint(true); });
+window.addEventListener("afterprint", () => { holdRenderForPrint(false); document.title = APP_TITLE; });
 
 /* ---------------- Share: a real PDF file ----------------
    Export goes through the browser's print dialog, which owns the PDF and never
